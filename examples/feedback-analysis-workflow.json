@@ -1,0 +1,75 @@
+{
+  "name": "Customer Feedback Analysis Pipeline",
+  "parameter_schema": {
+    "type": "object",
+    "properties": {
+      "days_back": {
+        "type": "integer",
+        "default": 7,
+        "minimum": 1,
+        "maximum": 30
+      },
+      "min_rating": {
+        "type": "integer",
+        "default": 1,
+        "minimum": 1,
+        "maximum": 5
+      },
+      "max_rating": {
+        "type": "integer",
+        "default": 3,
+        "minimum": 1,
+        "maximum": 5
+      }
+    }
+  },
+  "nodes": [
+    {
+      "id": "fetch_feedback",
+      "type": "sql_query",
+      "config": {
+        "query": "SELECT customer_id, feedback_text, rating, created_at, product_name FROM customer_feedback WHERE created_at >= date('now', '-{{parameters.days_back}} days') AND rating BETWEEN {{parameters.min_rating}} AND {{parameters.max_rating}} ORDER BY created_at DESC"
+      },
+      "dependencies": []
+    },
+    {
+      "id": "analyze_sentiment",
+      "type": "llm_enhancement",
+      "config": {
+        "model": "gpt-4",
+        "prompt": "Analyze the following customer feedback and provide structured analysis. Feedback: {{parent.fetch_feedback}}",
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "sentiment_score": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100
+            },
+            "key_issues": {
+              "type": "array"
+            },
+            "requires_followup": {
+              "type": "boolean"
+            }
+          }
+        }
+      },
+      "dependencies": ["fetch_feedback"]
+    },
+    {
+      "id": "format_report",
+      "type": "data_transformer",
+      "config": {
+        "template": {
+          "report_title": "Customer Feedback Analysis Report",
+          "date_range": "Last {{parameters.days_back}} days",
+          "rating_filter": "{{parameters.min_rating}}-{{parameters.max_rating}} stars",
+          "analysis": "{{parent.analyze_sentiment}}"
+        }
+      },
+      "dependencies": ["analyze_sentiment"]
+    }
+  ],
+  "output_node": "format_report"
+}

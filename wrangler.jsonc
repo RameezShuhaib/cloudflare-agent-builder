@@ -1,0 +1,33 @@
+/**
+ * For more details on how to configure Wrangler, refer to:
+ * https://developers.cloudflare.com/workers/wrangler/configuration/
+ */
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "agent-builder",
+	"main": "src/index.ts",
+	"compatibility_date": "2025-11-09",
+	"observability": {
+		"enabled": true
+	},
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "agent-builder-db",
+			"database_id": "TO_BE_CREATED"
+		}
+	],
+	"kv_namespaces": [
+		{
+			"binding": "CONFIGS",
+			"id": "TO_BE_CREATED"
+		}
+	],
+	"ai": {
+		"binding": "AI"
+	},
+	"vars": {
+		"CLOUDFLARE_ACCOUNT_ID": "YOUR_ACCOUNT_ID",
+		"AI_GATEWAY_ID": "YOUR_GATEWAY_ID"
+	}
+}

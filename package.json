@@ -1,0 +1,30 @@
+{
+	"name": "agent-builder",
+	"version": "1.0.0",
+	"private": true,
+	"scripts": {
+		"deploy": "wrangler deploy",
+		"dev": "wrangler dev",
+		"start": "wrangler dev",
+		"test": "vitest",
+		"cf-typegen": "wrangler types",
+		"db:generate": "drizzle-kit generate",
+		"db:migrate:local": "wrangler d1 execute agent-builder-db --local --file=./schema.sql",
+		"db:migrate:remote": "wrangler d1 execute agent-builder-db --remote --file=./schema.sql",
+		"db:studio": "drizzle-kit studio"
+	},
+	"devDependencies": {
+		"@cloudflare/vitest-pool-workers": "^0.8.19",
+		"drizzle-kit": "^0.31.6",
+		"typescript": "^5.5.2",
+		"vitest": "~3.2.0",
+		"wrangler": "^4.46.0"
+	},
+	"dependencies": {
+		"@hono/zod-validator": "^0.7.4",
+		"drizzle-orm": "^0.44.7",
+		"hono": "^4.10.4",
+		"openai": "^6.8.1",
+		"zod": "^4.1.12"
+	}
+}
