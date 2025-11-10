@@ -20,7 +20,7 @@ export class WorkflowRepository {
   }
 
   async findAll(): Promise<Workflow[]> {
-    return await this.db.select().from(workflows);
+    return this.db.select().from(workflows);
   }
 
   async update(id: string, data: Partial<NewWorkflow>): Promise<Workflow | undefined> {

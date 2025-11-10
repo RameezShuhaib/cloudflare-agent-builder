@@ -4,14 +4,14 @@ import { z } from 'zod';
 export const nodeSchema = z.object({
   id: z.string().min(1),
   type: z.string().min(1),
-  config: z.record(z.any()),
+  config: z.record(z.string(), z.any()),
   dependencies: z.array(z.string()),
 });
 
 // Parameter schema validation (JSON Schema structure)
 export const parameterSchemaSchema = z.object({
   type: z.literal('object'),
-  properties: z.record(z.any()),
+  properties: z.record(z.string(), z.any()),
   required: z.array(z.string()).optional(),
 });
 
@@ -35,7 +35,7 @@ export const updateWorkflowSchema = z.object({
 
 // Execute Workflow DTO
 export const executeWorkflowSchema = z.object({
-  parameters: z.record(z.any()),
+  parameters: z.record(z.string(), z.any()),
   config_id: z.string().optional(), // Optional config override
 });
 
@@ -44,7 +44,7 @@ export const createNodeExecutorSchema = z.object({
   type: z.string().min(1).regex(/^[a-z_]+$/, 'Type must be lowercase with underscores'),
   name: z.string().min(1).max(200),
   description: z.string().max(1000).optional(),
-  config_schema: z.record(z.any()),
+  config_schema: z.record(z.string(), z.any()),
   source_workflow_id: z.string().min(1),
 });
 
@@ -53,7 +53,7 @@ export const createConfigSchema = z.object({
   id: z.string().min(1).max(100).regex(/^[a-z0-9-_]+$/, 'ID must be lowercase alphanumeric with dashes/underscores'),
   name: z.string().min(1).max(200),
   description: z.string().max(1000).optional(),
-  variables: z.record(z.any()).refine((vars) => Object.keys(vars).length > 0, {
+  variables: z.record(z.string(), z.any()).refine((vars) => Object.keys(vars).length > 0, {
     message: 'Variables must contain at least one key-value pair',
   }),
 });
@@ -62,14 +62,14 @@ export const createConfigSchema = z.object({
 export const patchConfigSchema = z.object({
   name: z.string().min(1).max(200).optional(),
   description: z.string().max(1000).optional(),
-  variables: z.record(z.any()).optional(),
+  variables: z.record(z.string(), z.any()).optional(),
 });
 
 // Replace Config DTO (PUT - full replace)
 export const replaceConfigSchema = z.object({
   name: z.string().min(1).max(200).optional(),
   description: z.string().max(1000).optional(),
-  variables: z.record(z.any()).refine((vars) => Object.keys(vars).length > 0, {
+  variables: z.record(z.string(), z.any()).refine((vars) => Object.keys(vars).length > 0, {
     message: 'Variables must contain at least one key-value pair',
   }),
 });

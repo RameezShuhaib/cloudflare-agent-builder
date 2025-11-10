@@ -33,9 +33,6 @@ export class DataTransformerExecutor implements NodeExecutor {
       throw new Error('DataTransformer requires a template in config');
     }
 
-    // Parse the template with input data
-    const result = this.parser.parseObject(template, input);
-
-    return result;
+    return  this.parser.parseObject(template, input);
   }
 }

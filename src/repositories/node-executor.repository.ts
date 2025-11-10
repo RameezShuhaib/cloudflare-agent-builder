@@ -20,11 +20,11 @@ export class NodeExecutorRepository {
   }
 
   async findAll(): Promise<NodeExecutor[]> {
-    return await this.db.select().from(nodeExecutors);
+    return this.db.select().from(nodeExecutors);
   }
 
   async findByCategory(category: 'builtin' | 'custom'): Promise<NodeExecutor[]> {
-    return await this.db.select().from(nodeExecutors).where(eq(nodeExecutors.category, category));
+    return this.db.select().from(nodeExecutors).where(eq(nodeExecutors.category, category));
   }
 
   async delete(type: string): Promise<void> {

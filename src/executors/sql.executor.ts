@@ -35,13 +35,10 @@ export class SQLExecutor implements NodeExecutor {
       throw new Error('SQLExecutor requires a query in config');
     }
 
-    // Validate query (basic check for destructive operations)
     this.validateQuery(query);
 
-    // Parse the query template with input data
     const parsedQuery = this.parser.parse(query, input) as string;
 
-    // Execute the query
     const result = await this.db.prepare(parsedQuery).all();
 
     return result.results;

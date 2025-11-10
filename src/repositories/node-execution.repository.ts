@@ -20,7 +20,7 @@ export class NodeExecutionRepository {
   }
 
   async findByExecutionId(executionId: string): Promise<NodeExecution[]> {
-    return await this.db.select().from(nodeExecutions).where(eq(nodeExecutions.executionId, executionId));
+    return this.db.select().from(nodeExecutions).where(eq(nodeExecutions.executionId, executionId));
   }
 
   async update(id: string, data: Partial<NewNodeExecution>): Promise<NodeExecution | undefined> {
@@ -32,7 +32,8 @@ export class NodeExecutionRepository {
     return result[0];
   }
 
-  async bulkCreate(nodeExecutions: NewNodeExecution[]): Promise<void> {
-    await this.db.insert(nodeExecutions).values(nodeExecutions);
+  async bulkCreate(executions: NewNodeExecution[]): Promise<void> {
+    if (executions.length === 0) return;
+    await this.db.insert(nodeExecutions).values(executions);
   }
 }

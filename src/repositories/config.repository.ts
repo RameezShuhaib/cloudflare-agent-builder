@@ -20,7 +20,7 @@ export class ConfigRepository {
   }
 
   async findAll(): Promise<Config[]> {
-    return await this.db.select().from(configs);
+    return this.db.select().from(configs);
   }
 
   async update(id: string, data: Partial<NewConfig>): Promise<Config | undefined> {

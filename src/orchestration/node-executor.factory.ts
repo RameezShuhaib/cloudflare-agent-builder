@@ -38,27 +38,22 @@ export class NodeExecutorFactory {
   }
 
   async getExecutor(nodeType: string): Promise<NodeExecutor> {
-    // 1. Check if it's a builtin executor
     if (this.builtinExecutors.has(nodeType)) {
       return this.builtinExecutors.get(nodeType)!;
     }
 
-    // 2. Check cache for custom executor
     if (this.customExecutorCache.has(nodeType)) {
       return this.customExecutorCache.get(nodeType)!;
     }
 
-    // 3. Load custom executor from database
     const customExecutor = await this.loadCustomExecutor(nodeType);
 
-    // 4. Cache it for future use
     this.customExecutorCache.set(nodeType, customExecutor);
 
     return customExecutor;
   }
 
   private async loadCustomExecutor(type: string): Promise<NodeExecutor> {
-    // Step 1: Get executor definition from database
     const executorDef = await this.nodeExecRepo.findByType(type);
 
     if (!executorDef) {
@@ -69,7 +64,6 @@ export class NodeExecutorFactory {
       throw new Error(`Executor '${type}' is builtin, should not load as custom`);
     }
 
-    // Step 2: Get the source workflow
     if (!executorDef.sourceWorkflowId) {
       throw new Error(`Custom executor '${type}' has no source workflow`);
     }
@@ -82,7 +76,6 @@ export class NodeExecutorFactory {
       );
     }
 
-    // Step 3: Create WorkflowExecutor wrapper
     const orchestrator = new WorkflowOrchestrator(
       this.nodeExecutionRepo,
       this.executionRepo,
@@ -90,7 +83,7 @@ export class NodeExecutorFactory {
       new TemplateParser()
     );
 
-    const workflowExecutor = new WorkflowExecutor(
+    return new WorkflowExecutor(
       this.workflowRepo,
       this.executionRepo,
       orchestrator,
@@ -98,12 +91,9 @@ export class NodeExecutorFactory {
       workflow,
       executorDef.configSchema as Record<string, any>
     );
-
-    return workflowExecutor;
   }
 
   private registerBuiltinExecutors(): void {
-    // Register LLM Executor with all available options
     this.builtinExecutors.set(
       'llm_enhancement',
       new LLMExecutor({
@@ -114,7 +104,6 @@ export class NodeExecutorFactory {
       })
     );
 
-    // Register other executors
     this.builtinExecutors.set('data_transformer', new DataTransformerExecutor());
     this.builtinExecutors.set('sql_query', new SQLExecutor(this.options.db));
     this.builtinExecutors.set('http_request', new RequestExecutor());

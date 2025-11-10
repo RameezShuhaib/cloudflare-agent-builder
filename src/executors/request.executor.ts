@@ -46,27 +46,23 @@ export class RequestExecutor implements NodeExecutor {
       throw new Error('RequestExecutor requires a url in config');
     }
 
-    // Parse URL, headers, and body with input data
     const parsedUrl = this.parser.parse(url, input) as string;
     const parsedHeaders = this.parser.parseObject(headers, input);
     const parsedBody = body ? this.parser.parse(body, input) : undefined;
 
-    // Build request
     const requestInit: RequestInit = {
       method: method.toUpperCase(),
       headers: parsedHeaders,
     };
 
     if (parsedBody && method.toUpperCase() !== 'GET' && method.toUpperCase() !== 'HEAD') {
-      requestInit.body = typeof parsedBody === 'string' 
-        ? parsedBody 
+      requestInit.body = typeof parsedBody === 'string'
+        ? parsedBody
         : JSON.stringify(parsedBody);
     }
 
-    // Execute request
     const response = await fetch(parsedUrl, requestInit);
 
-    // Parse response
     const contentType = response.headers.get('content-type');
     let responseData;
 

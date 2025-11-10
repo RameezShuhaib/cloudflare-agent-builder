@@ -8,7 +8,7 @@ interface LLMConfig {
   model: string;
   prompt?: string;
   messages?: Array<{ role: string; content: string }>;
-  response_format?: any; // Zod schema or JSON schema object
+  response_format?: any;
   max_tokens?: number;
   temperature?: number;
   gateway?: {
@@ -16,7 +16,7 @@ interface LLMConfig {
     skipCache?: boolean;
     cacheTtl?: number;
   };
-  provider?: 'workers-ai' | 'openai-sdk'; // default: openai-sdk
+  provider?: 'workers-ai' | 'openai-sdk';
 }
 
 interface LLMExecutorOptions {
@@ -103,15 +103,12 @@ export class LLMExecutor implements NodeExecutor {
   async execute(config: Record<string, any>, input: Record<string, any>): Promise<any> {
     const llmConfig = config as LLMConfig;
 
-    // Validate required fields
     if (!llmConfig.model) {
       throw new Error('LLMExecutor requires a model in config');
     }
 
-    // Parse template variables in prompt or messages
     const parsedMessages = this.buildMessages(llmConfig, input);
 
-    // Determine which provider to use
     const provider = llmConfig.provider || 'openai-sdk';
 
     if (provider === 'openai-sdk') {
@@ -127,7 +124,6 @@ export class LLMExecutor implements NodeExecutor {
     config: LLMConfig,
     input: Record<string, any>
   ): Array<{ role: string; content: string }> {
-    // If messages array is provided, parse each message
     if (config.messages && Array.isArray(config.messages)) {
       return config.messages.map((msg) => ({
         role: msg.role,
@@ -135,7 +131,6 @@ export class LLMExecutor implements NodeExecutor {
       }));
     }
 
-    // If prompt string is provided, convert to messages array
     if (config.prompt) {
       const parsedPrompt = this.parser.parse(config.prompt, input) as string;
       return [{ role: 'user', content: parsedPrompt }];
@@ -152,29 +147,24 @@ export class LLMExecutor implements NodeExecutor {
       throw new Error('OpenAI SDK requires accountId and apiToken');
     }
 
-    // Determine gateway ID
     const gatewayId = config.gateway?.id || this.defaultGatewayId;
     if (!gatewayId) {
       throw new Error('Gateway ID is required for OpenAI SDK mode');
     }
 
-    // Initialize OpenAI client with AI Gateway endpoint
     const client = new OpenAI({
       apiKey: this.apiToken,
       baseURL: `https://gateway.ai.cloudflare.com/v1/${this.accountId}/${gatewayId}/compat`,
     });
 
-    // Prepare model name - ensure it has workers-ai prefix
     const modelName = config.model.startsWith('workers-ai/')
       ? config.model
       : `workers-ai/${config.model}`;
 
-    // Check if we have a response_format (structured output)
     if (config.response_format) {
       return await this.executeStructuredOutput(client, modelName, messages, config);
     }
 
-    // Standard completion without structured output
     const completion = await client.chat.completions.create({
       model: modelName,
       messages: messages as any,
@@ -201,7 +191,7 @@ export class LLMExecutor implements NodeExecutor {
     // Check if response_format is a Zod schema
     if (this.isZodSchema(responseFormat)) {
       // Use OpenAI's structured output with Zod
-      const completion = await client.beta.chat.completions.parse({
+      const completion = await (client.beta as any).chat.completions.parse({
         model: modelName,
         messages: messages as any,
         response_format: zodResponseFormat(responseFormat, 'output'),
@@ -256,7 +246,7 @@ export class LLMExecutor implements NodeExecutor {
     if (config.response_format) {
       // Convert Zod schema to JSON schema if needed
       let jsonSchema = config.response_format;
-      
+
       if (this.isZodSchema(jsonSchema)) {
         // For Zod schemas, we need to extract the JSON schema
         // This is a simplified version - in production, use zod-to-json-schema
@@ -269,7 +259,6 @@ export class LLMExecutor implements NodeExecutor {
       };
     }
 
-    // Prepare gateway options if provided
     const gatewayOptions = config.gateway
       ? {
           gateway: {
@@ -280,14 +269,10 @@ export class LLMExecutor implements NodeExecutor {
         }
       : undefined;
 
-    // Execute with Workers AI
-    const response = await this.ai.run(config.model, payload, gatewayOptions);
-
-    return response;
+    return await this.ai.run(config.model as any, payload, gatewayOptions);
   }
 
   private isZodSchema(value: any): boolean {
-    // Check if value is a Zod schema by checking for _def property
     return value && typeof value === 'object' && '_def' in value;
   }
 }

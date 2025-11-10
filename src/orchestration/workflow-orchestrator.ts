@@ -16,23 +16,18 @@ export class WorkflowOrchestrator {
 
   async execute(workflow: Workflow, execution: Execution): Promise<any> {
     try {
-      // Step 1: Validate dependencies
       this.validateDependencies(workflow.nodes as NodeDTO[]);
 
-      // Step 2: Sort nodes in execution order
       const sortedNodes = this.topologicalSort(workflow.nodes as NodeDTO[]);
 
-      // Step 3: Execute nodes in order
       const nodeOutputs = await this.executeNodesInOrder(
         sortedNodes,
         execution,
         execution.parameters as Record<string, any>
       );
 
-      // Step 4: Get output from the final output node
       const finalOutput = nodeOutputs.get(workflow.outputNode);
 
-      // Step 5: Update execution with result
       await this.executionRepo.update(execution.id, {
         status: 'completed',
         result: finalOutput,
@@ -41,7 +36,6 @@ export class WorkflowOrchestrator {
 
       return finalOutput;
     } catch (error: any) {
-      // Handle failure
       await this.executionRepo.update(execution.id, {
         status: 'failed',
         error: error.message,
@@ -63,12 +57,10 @@ export class WorkflowOrchestrator {
     }
 
     const visit = (nodeId: string) => {
-      // Cycle detection
       if (visiting.has(nodeId)) {
         throw new Error(`Circular dependency detected at node: ${nodeId}`);
       }
 
-      // Already processed
       if (visited.has(nodeId)) {
         return;
       }
@@ -80,7 +72,6 @@ export class WorkflowOrchestrator {
         throw new Error(`Node not found: ${nodeId}`);
       }
 
-      // Visit dependencies first (DFS)
       for (const depId of node.dependencies) {
         visit(depId);
       }
@@ -90,7 +81,6 @@ export class WorkflowOrchestrator {
       sorted.push(node);
     };
 
-    // Visit all nodes
     for (const node of nodes) {
       if (!visited.has(node.id)) {
         visit(node.id);
@@ -109,13 +99,10 @@ export class WorkflowOrchestrator {
 
     for (const node of sortedNodes) {
       try {
-        // Execute the node
         const output = await this.executeNode(node, execution, nodeOutputs, workflowParameters);
 
-        // Store output for dependent nodes
         nodeOutputs.set(node.id, output);
       } catch (error: any) {
-        // Mark node as failed
         const nodeExec = await this.nodeExecRepo.findById(node.id);
         if (nodeExec) {
           await this.nodeExecRepo.update(nodeExec.id, {
@@ -137,7 +124,6 @@ export class WorkflowOrchestrator {
     nodeOutputs: Map<string, any>,
     workflowParameters: Record<string, any>
   ): Promise<any> {
-    // Create node execution record
     const nodeExecution = await this.nodeExecRepo.create({
       id: generateId(),
       executionId: execution.id,
@@ -150,22 +136,17 @@ export class WorkflowOrchestrator {
     });
 
     try {
-      // Resolve dependencies - get outputs from parent nodes
       const dependencyData = this.resolveDependencies(node, nodeOutputs);
 
-      // Prepare input for node execution
       const input: Record<string, any> = {
         ...dependencyData,
         parameters: workflowParameters,
       };
 
-      // Get the appropriate executor for this node type
       const executor = await this.nodeFactory.getExecutor(node.type);
 
-      // Execute the node
       const output = await executor.execute(node.config, input);
 
-      // Mark as completed
       await this.nodeExecRepo.update(nodeExecution.id, {
         status: 'completed',
         output: output,
@@ -174,7 +155,6 @@ export class WorkflowOrchestrator {
 
       return output;
     } catch (error: any) {
-      // Mark as failed
       await this.nodeExecRepo.update(nodeExecution.id, {
         status: 'failed',
         error: error.message,
@@ -194,7 +174,6 @@ export class WorkflowOrchestrator {
         throw new Error(`Dependency ${depId} not found for node ${node.id}`);
       }
 
-      // Store with key "parent.{nodeId}"
       dependencyData.parent[depId] = depOutput;
     }
 
@@ -205,7 +184,6 @@ export class WorkflowOrchestrator {
     const nodeIds = new Set(nodes.map((n) => n.id));
 
     for (const node of nodes) {
-      // Check all dependencies exist
       for (const depId of node.dependencies) {
         if (!nodeIds.has(depId)) {
           throw new Error(`Node ${node.id} depends on non-existent node ${depId}`);

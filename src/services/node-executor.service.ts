@@ -11,6 +11,17 @@ import { SQLExecutor } from '../executors/sql.executor';
 import { RequestExecutor } from '../executors/request.executor';
 import type { NodeExecutor } from '../executors/node-executor.interface';
 
+interface NodeExecutorInfo {
+  type: string;
+  name: string;
+  description: string;
+  category: 'builtin' | 'custom';
+  configSchema: Record<string, any>;
+  isBuiltin: boolean;
+  sourceWorkflowId?: string | null;
+  createdAt: Date;
+}
+
 export class NodeExecutorService {
   private builtinExecutors: Map<string, NodeExecutor>;
 
@@ -38,16 +49,7 @@ export class NodeExecutorService {
     }
   }
 
-  async listNodeExecutors(): Promise<Array<{
-    type: string;
-    name: string;
-    description: string;
-    category: 'builtin' | 'custom';
-    configSchema: Record<string, any>;
-    isBuiltin: boolean;
-    sourceWorkflowId?: string | null;
-    createdAt: Date;
-  }>> {
+  async listNodeExecutors(): Promise<NodeExecutorInfo[]> {
     // Get custom executors from database
     const customExecutors = await this.nodeExecRepo.findAll();
 
@@ -66,20 +68,23 @@ export class NodeExecutorService {
       };
     });
 
+    // Map custom executors to NodeExecutorInfo
+    const customExecutorsList: NodeExecutorInfo[] = customExecutors.map((executor) => ({
+      type: executor.type,
+      name: executor.name,
+      description: executor.description || '',
+      category: executor.category,
+      configSchema: executor.configSchema as Record<string, any>,
+      isBuiltin: executor.isBuiltin,
+      sourceWorkflowId: executor.sourceWorkflowId,
+      createdAt: executor.createdAt,
+    }));
+
     // Combine both lists
-    return [...builtinExecutorsList, ...customExecutors];
+    return [...builtinExecutorsList, ...customExecutorsList];
   }
 
-  async getNodeExecutor(type: string): Promise<{
-    type: string;
-    name: string;
-    description: string;
-    category: 'builtin' | 'custom';
-    configSchema: Record<string, any>;
-    isBuiltin: boolean;
-    sourceWorkflowId?: string | null;
-    createdAt: Date;
-  }> {
+  async getNodeExecutor(type: string): Promise<NodeExecutorInfo> {
     // Check if it's a builtin executor
     const builtinExecutor = this.builtinExecutors.get(type);
     if (builtinExecutor) {
@@ -101,7 +106,17 @@ export class NodeExecutorService {
     if (!executor) {
       throw new Error('Node executor not found');
     }
-    return executor;
+    
+    return {
+      type: executor.type,
+      name: executor.name,
+      description: executor.description || '',
+      category: executor.category,
+      configSchema: executor.configSchema as Record<string, any>,
+      isBuiltin: executor.isBuiltin,
+      sourceWorkflowId: executor.sourceWorkflowId,
+      createdAt: executor.createdAt,
+    };
   }
 
   async createFromWorkflow(dto: CreateNodeExecutorDTO): Promise<NodeExecutorDB> {

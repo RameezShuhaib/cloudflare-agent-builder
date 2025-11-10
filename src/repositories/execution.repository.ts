@@ -20,7 +20,7 @@ export class ExecutionRepository {
   }
 
   async findByWorkflowId(workflowId: string): Promise<Execution[]> {
-    return await this.db.select().from(executions).where(eq(executions.workflowId, workflowId));
+    return this.db.select().from(executions).where(eq(executions.workflowId, workflowId));
   }
 
   async update(id: string, data: Partial<NewExecution>): Promise<Execution | undefined> {

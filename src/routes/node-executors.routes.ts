@@ -37,7 +37,7 @@ export function nodeExecutorRoutes(nodeExecutorService: NodeExecutorService) {
       return c.json({ error: error.message }, 400);
     }
   });
-z
+
   // DELETE /api/node-executors/:type - Delete custom node executor
   app.delete('/:type', async (c) => {
     try {

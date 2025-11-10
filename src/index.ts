@@ -26,7 +26,14 @@ export interface Env {
   AI_GATEWAY_ID?: string; // Default AI Gateway ID (optional)
 }
 
-const app = new Hono<{ Bindings: Env }>();
+type Variables = {
+  workflowService: WorkflowService;
+  executionService: ExecutionService;
+  nodeExecutorService: NodeExecutorService;
+  configService: ConfigService;
+};
+
+const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 // CORS middleware
 app.use('/*', cors());
@@ -50,7 +57,7 @@ app.use('*', async (c, next) => {
 
   // Initialize services
   const configService = new ConfigService(configRepo, kv);
-  
+
   // Initialize orchestration components
   const templateParser = new TemplateParser();
   const nodeExecutorFactory = new NodeExecutorFactory(
@@ -100,15 +107,15 @@ app.route('/api/configs', configRoutes(app.get('configService') as any));
 
 // Workflow execution route (special case - under workflows)
 app.post('/api/workflows/:id/execute', async (c) => {
-  const executionService = c.get('executionService') as ExecutionService;
+  const executionService = c.get('executionService');
   const workflowId = c.req.param('id');
   const body = await c.req.json();
-  
+
   try {
     const execution = await executionService.executeWorkflow(
       workflowId,
       body.parameters || {},
-      body.config_id // Optional config override
+      body.config_id
     );
     return c.json(execution, 201);
   } catch (error: any) {
@@ -118,9 +125,9 @@ app.post('/api/workflows/:id/execute', async (c) => {
 
 // Workflow executions list route
 app.get('/api/workflows/:id/executions', async (c) => {
-  const executionService = c.get('executionService') as ExecutionService;
+  const executionService = c.get('executionService');
   const workflowId = c.req.param('id');
-  
+
   try {
     const executions = await executionService.listExecutionsByWorkflow(workflowId);
     return c.json(executions);

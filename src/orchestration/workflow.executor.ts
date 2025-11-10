@@ -16,6 +16,15 @@ export class WorkflowExecutor implements NodeExecutor {
     private configSchema: Record<string, any>
   ) {}
 
+  getDefinition() {
+    return {
+      type: `workflow_${this.workflow.id}`,
+      name: this.workflow.name,
+      description: `Workflow executor for ${this.workflow.name}`,
+      configSchema: this.configSchema,
+    };
+  }
+
   async execute(config: Record<string, any>, input: Record<string, any>): Promise<any> {
     // Step 1: Validate config against schema
     this.validateConfig(config);
@@ -30,6 +39,7 @@ export class WorkflowExecutor implements NodeExecutor {
       status: 'running',
       startedAt: new Date(),
       parameters: workflowParameters,
+      configId: null,
       result: null,
       error: null,
       completedAt: null,
