@@ -1,7 +1,7 @@
+import Env from '../env';
 import { NodeExecutorRepository } from '../repositories/node-executor.repository';
 import { WorkflowRepository } from '../repositories/workflow.repository';
 import { NodeExecutor } from '../executors/node-executor.interface';
-import { LLMExecutor } from '../executors/llm.executor';
 import { DataTransformerExecutor } from '../executors/data-transformer.executor';
 import { SQLExecutor } from '../executors/sql.executor';
 import { RequestExecutor } from '../executors/request.executor';
@@ -11,27 +11,21 @@ import { NodeExecutionRepository } from '../repositories/node-execution.reposito
 import { ExecutionRepository } from '../repositories/execution.repository';
 import { TemplateParser } from '../utils/template-parser';
 
-interface NodeExecutorFactoryOptions {
-  ai?: Ai;
-  db: D1Database;
-  accountId?: string;
-  apiToken?: string;
-  defaultGatewayId?: string;
-}
 
 export class NodeExecutorFactory {
+	private readonly env: Env;
+
   private builtinExecutors: Map<string, NodeExecutor>;
   private customExecutorCache: Map<string, NodeExecutor>;
-  private options: NodeExecutorFactoryOptions;
 
   constructor(
     private nodeExecRepo: NodeExecutorRepository,
     private workflowRepo: WorkflowRepository,
     private nodeExecutionRepo: NodeExecutionRepository,
     private executionRepo: ExecutionRepository,
-    options: NodeExecutorFactoryOptions
+    env: Env
   ) {
-    this.options = options;
+    this.env = env;
     this.builtinExecutors = new Map();
     this.customExecutorCache = new Map();
     this.registerBuiltinExecutors();
@@ -60,10 +54,6 @@ export class NodeExecutorFactory {
       throw new Error(`Executor type '${type}' not found`);
     }
 
-    if (executorDef.isBuiltin) {
-      throw new Error(`Executor '${type}' is builtin, should not load as custom`);
-    }
-
     if (!executorDef.sourceWorkflowId) {
       throw new Error(`Custom executor '${type}' has no source workflow`);
     }
@@ -80,33 +70,22 @@ export class NodeExecutorFactory {
       this.nodeExecutionRepo,
       this.executionRepo,
       this,
-      new TemplateParser()
     );
 
     return new WorkflowExecutor(
-      this.workflowRepo,
       this.executionRepo,
       orchestrator,
-      new TemplateParser(),
       workflow,
-      executorDef.configSchema as Record<string, any>
+      executorDef.configSchema as Record<string, any>,
+			this.env,
     );
   }
 
   private registerBuiltinExecutors(): void {
-    this.builtinExecutors.set(
-      'llm_enhancement',
-      new LLMExecutor({
-        ai: this.options.ai,
-        accountId: this.options.accountId,
-        apiToken: this.options.apiToken,
-        defaultGatewayId: this.options.defaultGatewayId,
-      })
-    );
-
-    this.builtinExecutors.set('data_transformer', new DataTransformerExecutor());
-    this.builtinExecutors.set('sql_query', new SQLExecutor(this.options.db));
-    this.builtinExecutors.set('http_request', new RequestExecutor());
+		this.builtinExecutors.set('data_transformer', new DataTransformerExecutor(this.env));
+    this.builtinExecutors.set('data_transformer', new DataTransformerExecutor(this.env));
+    this.builtinExecutors.set('sql_query', new SQLExecutor(this.env));
+    this.builtinExecutors.set('http_request', new RequestExecutor(this.env));
   }
 
   clearCache(type?: string): void {

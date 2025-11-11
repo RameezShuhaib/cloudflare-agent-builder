@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
+import Env from './env';
 import { WorkflowRepository } from './repositories/workflow.repository';
 import { ExecutionRepository } from './repositories/execution.repository';
 import { NodeExecutionRepository } from './repositories/node-execution.repository';
@@ -17,14 +18,6 @@ import { executionRoutes } from './routes/executions.routes';
 import { nodeExecutorRoutes } from './routes/node-executors.routes';
 import { configRoutes } from './routes/configs.routes';
 
-export interface Env {
-  DB: D1Database;
-  CONFIGS: KVNamespace; // KV for config variables
-  AI?: Ai; // Workers AI binding (optional)
-  CLOUDFLARE_ACCOUNT_ID?: string; // For OpenAI SDK with AI Gateway
-  CLOUDFLARE_API_TOKEN?: string; // For OpenAI SDK with AI Gateway
-  AI_GATEWAY_ID?: string; // Default AI Gateway ID (optional)
-}
 
 type Variables = {
   workflowService: WorkflowService;
@@ -65,19 +58,12 @@ app.use('*', async (c, next) => {
     workflowRepo,
     nodeExecRepo,
     executionRepo,
-    {
-      ai: c.env.AI,
-      db: db,
-      accountId: c.env.CLOUDFLARE_ACCOUNT_ID,
-      apiToken: c.env.CLOUDFLARE_API_TOKEN,
-      defaultGatewayId: c.env.AI_GATEWAY_ID,
-    }
+		c.env
   );
   const orchestrator = new WorkflowOrchestrator(
     nodeExecRepo,
     executionRepo,
     nodeExecutorFactory,
-    templateParser
   );
 
   const workflowService = new WorkflowService(workflowRepo);

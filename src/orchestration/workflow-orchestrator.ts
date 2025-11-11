@@ -11,7 +11,6 @@ export class WorkflowOrchestrator {
     private nodeExecRepo: NodeExecutionRepository,
     private executionRepo: ExecutionRepository,
     private nodeFactory: NodeExecutorFactory,
-    private parser: TemplateParser
   ) {}
 
   async execute(workflow: Workflow, execution: Execution): Promise<any> {

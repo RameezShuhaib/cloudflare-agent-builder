@@ -14,20 +14,16 @@
 		{
 			"binding": "DB",
 			"database_name": "agent-builder-db",
-			"database_id": "TO_BE_CREATED"
+			"database_id": "911b682a-02dd-448f-bcce-c892a4fe4402"
 		}
 	],
 	"kv_namespaces": [
 		{
 			"binding": "CONFIGS",
-			"id": "TO_BE_CREATED"
+			"id": "1f749cdb25274866985b7583a2df8ce2"
 		}
 	],
 	"ai": {
 		"binding": "AI"
-	},
-	"vars": {
-		"CLOUDFLARE_ACCOUNT_ID": "YOUR_ACCOUNT_ID",
-		"AI_GATEWAY_ID": "YOUR_GATEWAY_ID"
 	}
 }

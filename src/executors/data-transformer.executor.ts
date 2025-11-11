@@ -1,29 +1,23 @@
 import { NodeExecutor } from './node-executor.interface';
 import { TemplateParser } from '../utils/template-parser';
+import { z } from 'zod';
+import Env from '../env';
 
-export class DataTransformerExecutor implements NodeExecutor {
+export class DataTransformerExecutor extends NodeExecutor {
+  readonly type = 'data_transformer';
+  readonly description = 'Transform data using templates with variable substitution';
+
   private parser: TemplateParser;
 
-  constructor() {
+  constructor(env: Env) {
+		super(env)
     this.parser = new TemplateParser();
   }
 
-  getDefinition() {
-    return {
-      type: 'data_transformer',
-      name: 'Data Transformer',
-      description: 'Transform data using templates with variable substitution',
-      configSchema: {
-        type: 'object',
-        properties: {
-          template: {
-            type: 'object',
-            description: 'Template object with {{variable}} placeholders',
-          },
-        },
-        required: ['template'],
-      },
-    };
+  getConfigSchema() {
+    return z.object({
+      template: z.record(z.any(), z.any()).describe('Template object with {{variable}} placeholders'),
+    });
   }
 
   async execute(config: Record<string, any>, input: Record<string, any>): Promise<any> {

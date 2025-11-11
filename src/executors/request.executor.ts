@@ -1,42 +1,32 @@
+import { z } from 'zod';
 import { NodeExecutor } from './node-executor.interface';
 import { TemplateParser } from '../utils/template-parser';
 
-export class RequestExecutor implements NodeExecutor {
+
+const httpRequestConfigSchema = z.object({
+	url: z.string().describe('Request URL with {{variable}} placeholders'),
+	method: z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'])
+		.default('GET')
+		.describe('HTTP method'),
+	headers: z.record(z.string(), z.string()).optional().describe('Request headers with {{variable}} placeholders'),
+	body: z.any().optional().describe('Request body (for POST, PUT, PATCH) with {{variable}} placeholders'),
+});
+
+export type HttpRequestConfig = z.infer<typeof httpRequestConfigSchema>;
+
+export class RequestExecutor extends NodeExecutor {
+  readonly type = 'http_request';
+  readonly description = 'Make HTTP requests with template variable support';
+
   private parser: TemplateParser;
 
-  constructor() {
+  constructor(env: Env) {
+		super(env)
     this.parser = new TemplateParser();
   }
 
-  getDefinition() {
-    return {
-      type: 'http_request',
-      name: 'HTTP Request',
-      description: 'Make HTTP requests with template variable support',
-      configSchema: {
-        type: 'object',
-        properties: {
-          url: {
-            type: 'string',
-            description: 'Request URL with {{variable}} placeholders',
-          },
-          method: {
-            type: 'string',
-            enum: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'],
-            default: 'GET',
-            description: 'HTTP method',
-          },
-          headers: {
-            type: 'object',
-            description: 'Request headers with {{variable}} placeholders',
-          },
-          body: {
-            description: 'Request body (for POST, PUT, PATCH) with {{variable}} placeholders',
-          },
-        },
-        required: ['url'],
-      },
-    };
+  getConfigSchema() {
+    return httpRequestConfigSchema;
   }
 
   async execute(config: Record<string, any>, input: Record<string, any>): Promise<any> {

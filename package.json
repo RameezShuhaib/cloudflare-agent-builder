@@ -3,6 +3,7 @@
 	"version": "1.0.0",
 	"private": true,
 	"scripts": {
+		"setup": "node scripts/setup.js",
 		"deploy": "wrangler deploy",
 		"dev": "wrangler dev",
 		"start": "wrangler dev",
@@ -25,6 +26,7 @@
 		"drizzle-orm": "^0.44.7",
 		"hono": "^4.10.4",
 		"openai": "^6.8.1",
-		"zod": "^4.1.12"
+		"zod": "^4.1.12",
+		"zod-to-json-schema": "^3.24.6"
 	}
 }

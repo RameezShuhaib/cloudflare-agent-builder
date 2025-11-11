@@ -1,103 +1,54 @@
 import { NodeExecutor } from './node-executor.interface';
 import { TemplateParser } from '../utils/template-parser';
 import OpenAI from 'openai';
-import { zodResponseFormat } from 'openai/helpers/zod';
 import { z } from 'zod';
+import Env from '../env';
 
-interface LLMConfig {
-  model: string;
-  prompt?: string;
-  messages?: Array<{ role: string; content: string }>;
-  response_format?: any;
-  max_tokens?: number;
-  temperature?: number;
-  gateway?: {
-    id: string;
-    skipCache?: boolean;
-    cacheTtl?: number;
-  };
-  provider?: 'workers-ai' | 'openai-sdk';
-}
 
-interface LLMExecutorOptions {
-  ai?: Ai; // Workers AI binding
-  accountId?: string;
-  apiToken?: string;
-  defaultGatewayId?: string;
-}
+const llmConfigSchema = z.object({
+	model: z.string().min(1),
+	provider: z.enum(['workers-ai', 'openai-sdk']).default('workers-ai'),
+	prompt: z.string().optional(),
+	messages: z.array(
+		z.object({
+			role: z.string(),
+			content: z.string().min(1)
+		})
+	).optional(),
+	response_format: z.any().optional(),
+	max_tokens: z.number().positive().int().optional(),
+	temperature: z.number().min(0).max(2).optional(),
+	gateway: z.object({
+		id: z.string().min(1),
+		skipCache: z.boolean().optional(),
+		cacheTtl: z.number().positive().optional()
+	}).optional(),
+	cloudflare: z.object({
+		accountId: z.string(),
+		apiToken: z.string(),
+	})
+});
 
-export class LLMExecutor implements NodeExecutor {
+
+type LLMConfig = z.infer<typeof llmConfigSchema>;
+
+
+export class LLMExecutor extends NodeExecutor {
+  readonly type = 'llm';
+  readonly description = 'Execute LLM requests with support for multiple providers (Workers AI, OpenAI)';
+
   private parser: TemplateParser;
-  private ai?: Ai;
-  private accountId?: string;
-  private apiToken?: string;
-  private defaultGatewayId?: string;
+  private readonly ai?: Ai;
 
-  constructor(options: LLMExecutorOptions = {}) {
+  constructor(env: Env) {
+		super(env)
+
     this.parser = new TemplateParser();
-    this.ai = options.ai;
-    this.accountId = options.accountId;
-    this.apiToken = options.apiToken;
-    this.defaultGatewayId = options.defaultGatewayId;
+    this.ai = env.AI;
   }
 
-  getDefinition() {
-    return {
-      type: 'llm_enhancement',
-      name: 'LLM Enhancement',
-      description: 'Execute LLM calls with structured output support using OpenAI SDK or Workers AI',
-      configSchema: {
-        type: 'object',
-        properties: {
-          model: {
-            type: 'string',
-            description: 'Model ID (e.g., @cf/meta/llama-3.1-8b-instruct)',
-          },
-          prompt: {
-            type: 'string',
-            description: 'Simple prompt string (alternative to messages)',
-          },
-          messages: {
-            type: 'array',
-            description: 'Array of message objects with role and content',
-            items: {
-              type: 'object',
-              properties: {
-                role: { type: 'string' },
-                content: { type: 'string' },
-              },
-            },
-          },
-          response_format: {
-            description: 'Zod schema or JSON schema for structured output',
-          },
-          max_tokens: {
-            type: 'number',
-            default: 1000,
-          },
-          temperature: {
-            type: 'number',
-            minimum: 0,
-            maximum: 2,
-          },
-          gateway: {
-            type: 'object',
-            properties: {
-              id: { type: 'string' },
-              skipCache: { type: 'boolean' },
-              cacheTtl: { type: 'number' },
-            },
-          },
-          provider: {
-            type: 'string',
-            enum: ['workers-ai', 'openai-sdk'],
-            default: 'openai-sdk',
-            description: 'Provider to use (openai-sdk recommended for structured output)',
-          },
-        },
-        required: ['model'],
-      },
-    };
+  getConfigSchema() {
+    return llmConfigSchema;
   }
 
   async execute(config: Record<string, any>, input: Record<string, any>): Promise<any> {
@@ -143,18 +94,18 @@ export class LLMExecutor implements NodeExecutor {
     config: LLMConfig,
     messages: Array<{ role: string; content: string }>
   ): Promise<any> {
-    if (!this.accountId || !this.apiToken) {
+    if (!config.cloudflare.accountId || !config.cloudflare.apiToken) {
       throw new Error('OpenAI SDK requires accountId and apiToken');
     }
 
-    const gatewayId = config.gateway?.id || this.defaultGatewayId;
+    const gatewayId = config.gateway?.id;
     if (!gatewayId) {
       throw new Error('Gateway ID is required for OpenAI SDK mode');
     }
 
     const client = new OpenAI({
-      apiKey: this.apiToken,
-      baseURL: `https://gateway.ai.cloudflare.com/v1/${this.accountId}/${gatewayId}/compat`,
+      apiKey: config.cloudflare.apiToken,
+      baseURL: `https://gateway.ai.cloudflare.com/v1/${config.cloudflare.accountId}/${gatewayId}/compat`,
     });
 
     const modelName = config.model.startsWith('workers-ai/')
@@ -188,43 +139,23 @@ export class LLMExecutor implements NodeExecutor {
   ): Promise<any> {
     const responseFormat = config.response_format;
 
-    // Check if response_format is a Zod schema
-    if (this.isZodSchema(responseFormat)) {
-      // Use OpenAI's structured output with Zod
-      const completion = await (client.beta as any).chat.completions.parse({
-        model: modelName,
-        messages: messages as any,
-        response_format: zodResponseFormat(responseFormat, 'output'),
-        max_tokens: config.max_tokens || 1000,
-        temperature: config.temperature,
-      });
+		const completion = await client.chat.completions.create({
+			model: modelName,
+			messages: messages as any,
+			response_format: {
+				type: 'json_schema',
+				json_schema: responseFormat,
+			} as any,
+			max_tokens: config.max_tokens || 1000,
+			temperature: config.temperature,
+		});
 
-      return completion.choices[0].message.parsed;
-    }
-
-    // If it's a JSON schema object (not Zod), convert to JSON mode format
-    if (typeof responseFormat === 'object' && responseFormat.type) {
-      const completion = await client.chat.completions.create({
-        model: modelName,
-        messages: messages as any,
-        response_format: {
-          type: 'json_schema',
-          json_schema: responseFormat,
-        } as any,
-        max_tokens: config.max_tokens || 1000,
-        temperature: config.temperature,
-      });
-
-      // Parse the JSON response
-      const content = completion.choices[0].message.content;
-      try {
-        return JSON.parse(content || '{}');
-      } catch (error) {
-        throw new Error(`Failed to parse JSON response: ${error}`);
-      }
-    }
-
-    throw new Error('Invalid response_format: must be a Zod schema or JSON schema object');
+		const content = completion.choices[0].message.content;
+		try {
+			return JSON.parse(content || '{}');
+		} catch (error) {
+			throw new Error(`Failed to parse JSON response: ${error}`);
+		}
   }
 
   private async executeWithWorkersAI(

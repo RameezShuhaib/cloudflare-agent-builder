@@ -1,31 +1,25 @@
 import { NodeExecutor } from './node-executor.interface';
 import { TemplateParser } from '../utils/template-parser';
+import { z } from 'zod';
+import Env from '../env';
 
-export class SQLExecutor implements NodeExecutor {
+export class SQLExecutor extends NodeExecutor {
+  readonly type = 'sql_query';
+  readonly description = 'Execute SQL queries on D1 database with template variable support';
+  
   private db: D1Database;
   private parser: TemplateParser;
 
-  constructor(db: D1Database) {
-    this.db = db;
+  constructor(env: Env) {
+		super(env)
+    this.db = env.DB;
     this.parser = new TemplateParser();
   }
 
-  getDefinition() {
-    return {
-      type: 'sql_query',
-      name: 'SQL Query',
-      description: 'Execute SQL queries on D1 database with template variable support',
-      configSchema: {
-        type: 'object',
-        properties: {
-          query: {
-            type: 'string',
-            description: 'SQL query with {{variable}} placeholders',
-          },
-        },
-        required: ['query'],
-      },
-    };
+  getConfigSchema() {
+    return z.object({
+      query: z.string().describe('SQL query with {{variable}} placeholders'),
+    });
   }
 
   async execute(config: Record<string, any>, input: Record<string, any>): Promise<any> {

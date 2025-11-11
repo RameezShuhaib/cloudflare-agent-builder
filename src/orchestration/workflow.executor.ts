@@ -3,36 +3,42 @@ import { WorkflowRepository } from '../repositories/workflow.repository';
 import { ExecutionRepository } from '../repositories/execution.repository';
 import { WorkflowOrchestrator } from './workflow-orchestrator';
 import { TemplateParser } from '../utils/template-parser';
-import { validateJsonSchema, generateId } from '../utils/helpers';
+import { generateId } from '../utils/helpers';
+import { z } from 'zod';
 import type { Workflow } from '../db/schema';
+import Env from '../env';
 
-export class WorkflowExecutor implements NodeExecutor {
-  constructor(
-    private workflowRepo: WorkflowRepository,
+export class WorkflowExecutor extends NodeExecutor {
+	readonly type: string;
+	readonly description: string;
+	
+	private readonly parser: TemplateParser;
+	private readonly configSchemaZod: z.ZodObject<any>;
+
+	constructor(
     private executionRepo: ExecutionRepository,
     private orchestrator: WorkflowOrchestrator,
-    private parser: TemplateParser,
     private workflow: Workflow,
-    private configSchema: Record<string, any>
-  ) {}
+    configSchema: z.ZodObject<any>,
+		env: Env
+  ) {
+		super(env)
 
-  getDefinition() {
-    return {
-      type: `workflow_${this.workflow.id}`,
-      name: this.workflow.name,
-      description: `Workflow executor for ${this.workflow.name}`,
-      configSchema: this.configSchema,
-    };
+		this.type = `workflow_${this.workflow.id}`;
+		this.description = `Workflow executor for ${this.workflow.name}`;
+		this.configSchemaZod = configSchema;
+		this.parser = new TemplateParser();
+	}
+
+  getConfigSchema() {
+    return this.configSchemaZod;
   }
 
   async execute(config: Record<string, any>, input: Record<string, any>): Promise<any> {
-    // Step 1: Validate config against schema
     this.validateConfig(config);
 
-    // Step 2: Map input data to workflow parameters
     const workflowParameters = this.mapInputToParameters(config, input);
 
-    // Step 3: Create a temporary execution record
     const execution = await this.executionRepo.create({
       id: generateId(),
       workflowId: this.workflow.id,
@@ -45,11 +51,7 @@ export class WorkflowExecutor implements NodeExecutor {
       completedAt: null,
     });
 
-    // Step 4: Execute the workflow
-    const result = await this.orchestrator.execute(this.workflow, execution);
-
-    // Step 5: Return the output
-    return result;
+    return await this.orchestrator.execute(this.workflow, execution);
   }
 
   private mapInputToParameters(
@@ -63,16 +65,17 @@ export class WorkflowExecutor implements NodeExecutor {
       config: config,
     };
 
-    // Parse the mapping template with input data
     return this.parser.parseObject(mapping, context);
   }
 
   private validateConfig(config: Record<string, any>): void {
-    // Validate config against configSchema
-    const isValid = validateJsonSchema(config, this.configSchema);
-
-    if (!isValid) {
-      throw new Error('Invalid configuration for custom executor');
+    try {
+      this.configSchemaZod.parse(config);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        throw new Error(`Invalid configuration for workflow executor: ${error.message}`);
+      }
+      throw error;
     }
   }
 }

@@ -1,10 +1,7 @@
 import { NodeExecutorRepository } from '../repositories/node-executor.repository';
 import { WorkflowRepository } from '../repositories/workflow.repository';
-import { generateId } from '../utils/helpers';
 import type { CreateNodeExecutorDTO } from '../schemas/dtos';
 import type { NodeExecutor as NodeExecutorDB } from '../db/schema';
-
-// Import all builtin executors
 import { LLMExecutor } from '../executors/llm.executor';
 import { DataTransformerExecutor } from '../executors/data-transformer.executor';
 import { SQLExecutor } from '../executors/sql.executor';
@@ -106,7 +103,7 @@ export class NodeExecutorService {
     if (!executor) {
       throw new Error('Node executor not found');
     }
-    
+
     return {
       type: executor.type,
       name: executor.name,
@@ -120,7 +117,6 @@ export class NodeExecutorService {
   }
 
   async createFromWorkflow(dto: CreateNodeExecutorDTO): Promise<NodeExecutorDB> {
-    // Check if type already exists (both builtin and custom)
     if (this.builtinExecutors.has(dto.type)) {
       throw new Error('Cannot create custom executor with same type as builtin executor');
     }
@@ -139,8 +135,7 @@ export class NodeExecutorService {
     // Validate config schema
     this.validateConfigSchema(dto.config_schema);
 
-    // Create node executor
-    const executor = await this.nodeExecRepo.create({
+    return await this.nodeExecRepo.create({
       type: dto.type,
       name: dto.name,
       description: dto.description || null,
@@ -150,12 +145,9 @@ export class NodeExecutorService {
       sourceWorkflowId: dto.source_workflow_id,
       createdAt: new Date(),
     });
-
-    return executor;
   }
 
   async deleteNodeExecutor(type: string): Promise<void> {
-    // Prevent deletion of builtin executors
     if (this.builtinExecutors.has(type)) {
       throw new Error('Cannot delete builtin node executor');
     }
