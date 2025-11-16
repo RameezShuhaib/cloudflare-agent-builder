@@ -1,17 +1,21 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { ExecutionService } from '../services/execution.service';
-import { executeWorkflowSchema } from '../schemas/dtos';
+import { ExecuteWorkflowDTO } from '../schemas/dtos';
 
 export function executionRoutes(executionService: ExecutionService) {
   const app = new Hono();
 
   // POST /api/workflows/:id/execute - Execute workflow
-  app.post('/:id/execute', zValidator('json', executeWorkflowSchema), async (c) => {
+  app.post('/:id/execute', zValidator('json', ExecuteWorkflowDTO), async (c) => {
     try {
       const workflowId = c.req.param('id');
       const dto = c.req.valid('json');
-      const execution = await executionService.executeWorkflow(workflowId, dto.parameters);
+      const execution = await executionService.executeWorkflow(
+        workflowId,
+        dto.parameters,
+        dto.configId
+      );
       return c.json(execution, 201);
     } catch (error: any) {
       return c.json({ error: error.message }, 400);

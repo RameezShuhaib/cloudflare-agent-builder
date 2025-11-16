@@ -2,17 +2,17 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { ConfigService } from '../services/config.service';
 import {
-  createConfigSchema,
-  patchConfigSchema,
-  replaceConfigSchema,
-  updateConfigVariableSchema,
+  CreateConfigDTO,
+  PatchConfigDTO,
+  ReplaceConfigDTO,
+  UpdateConfigVariableDTO,
 } from '../schemas/dtos';
 
 export function configRoutes(configService: ConfigService) {
   const app = new Hono();
 
   // POST /api/configs - Create config
-  app.post('/', zValidator('json', createConfigSchema), async (c) => {
+  app.post('/', zValidator('json', CreateConfigDTO), async (c) => {
     try {
       const dto = c.req.valid('json');
       const config = await configService.createConfig(dto);
@@ -47,7 +47,7 @@ export function configRoutes(configService: ConfigService) {
   });
 
   // PATCH /api/configs/:id - Partial update (merge variables)
-  app.patch('/:id', zValidator('json', patchConfigSchema), async (c) => {
+  app.patch('/:id', zValidator('json', PatchConfigDTO), async (c) => {
     try {
       const id = c.req.param('id');
       const dto = c.req.valid('json');
@@ -59,7 +59,7 @@ export function configRoutes(configService: ConfigService) {
   });
 
   // PUT /api/configs/:id - Full replace
-  app.put('/:id', zValidator('json', replaceConfigSchema), async (c) => {
+  app.put('/:id', zValidator('json', ReplaceConfigDTO), async (c) => {
     try {
       const id = c.req.param('id');
       const dto = c.req.valid('json');
@@ -94,7 +94,7 @@ export function configRoutes(configService: ConfigService) {
   });
 
   // PUT /api/configs/:id/variables/:key - Update single variable
-  app.put('/:id/variables/:key', zValidator('json', updateConfigVariableSchema), async (c) => {
+  app.put('/:id/variables/:key', zValidator('json', UpdateConfigVariableDTO), async (c) => {
     try {
       const id = c.req.param('id');
       const key = c.req.param('key');

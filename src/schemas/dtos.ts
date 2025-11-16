@@ -1,90 +1,85 @@
 import { z } from 'zod';
+import { WorkflowSchema, NodeSchema, ExecutionSchema, ConfigSchema } from '../domain/entities';
 
-// Node schema
-export const nodeSchema = z.object({
-  id: z.string().min(1),
-  type: z.string().min(1),
-  config: z.record(z.string(), z.any()),
-  dependencies: z.array(z.string()),
-});
+// ============================================
+// Node DTOs
+// ============================================
 
-// Parameter schema validation (JSON Schema structure)
-export const parameterSchemaSchema = z.object({
-  type: z.literal('object'),
-  properties: z.record(z.string(), z.any()),
-  required: z.array(z.string()).optional(),
-});
+// Use domain NodeSchema directly for node structure
+export const NodeDTO = NodeSchema;
+export type NodeDTO = z.infer<typeof NodeDTO>;
 
-// Create Workflow DTO
-export const createWorkflowSchema = z.object({
-  name: z.string().min(1).max(200),
-  parameter_schema: parameterSchemaSchema,
-  nodes: z.array(nodeSchema).min(1),
-  output_node: z.string().min(1),
-  default_config_id: z.string().optional(),
-});
+// ============================================
+// Workflow DTOs
+// ============================================
 
-// Update Workflow DTO
-export const updateWorkflowSchema = z.object({
-  name: z.string().min(1).max(200).optional(),
-  parameter_schema: parameterSchemaSchema.optional(),
-  nodes: z.array(nodeSchema).min(1).optional(),
-  output_node: z.string().min(1).optional(),
-  default_config_id: z.string().optional(),
-});
+// Create Workflow DTO - omit generated fields (id, timestamps)
+export const CreateWorkflowDTO = WorkflowSchema
+  .omit({ id: true, createdAt: true, updatedAt: true })
+  .extend({
+    // Enforce proper parameter schema structure for workflows
+    parameterSchema: z.object({
+      type: z.literal('object'),
+      properties: z.record(z.string(), z.any()),
+      required: z.array(z.string()).optional(),
+    }),
+  });
+export type CreateWorkflowDTO = z.infer<typeof CreateWorkflowDTO>;
 
-// Execute Workflow DTO
-export const executeWorkflowSchema = z.object({
+// Update Workflow DTO - all fields optional
+export const UpdateWorkflowDTO = CreateWorkflowDTO.partial();
+export type UpdateWorkflowDTO = z.infer<typeof UpdateWorkflowDTO>;
+
+// ============================================
+// Execution DTOs
+// ============================================
+
+// Execute Workflow DTO - input for triggering workflow execution
+export const ExecuteWorkflowDTO = z.object({
   parameters: z.record(z.string(), z.any()),
-  config_id: z.string().optional(), // Optional config override
+  configId: z.string().optional(),
 });
+export type ExecuteWorkflowDTO = z.infer<typeof ExecuteWorkflowDTO>;
 
-// Create Node Executor DTO
-export const createNodeExecutorSchema = z.object({
-  type: z.string().min(1).regex(/^[a-z_]+$/, 'Type must be lowercase with underscores'),
-  name: z.string().min(1).max(200),
-  description: z.string().max(1000).optional(),
-  config_schema: z.record(z.string(), z.any()),
-  source_workflow_id: z.string().min(1),
-});
+// Execution response includes the full execution model
+export type ExecutionResponseDTO = z.infer<typeof ExecutionSchema>;
 
-// Create Config DTO
-export const createConfigSchema = z.object({
-  id: z.string().min(1).max(100).regex(/^[a-z0-9-_]+$/, 'ID must be lowercase alphanumeric with dashes/underscores'),
-  name: z.string().min(1).max(200),
-  description: z.string().max(1000).optional(),
-  variables: z.record(z.string(), z.any()).refine((vars) => Object.keys(vars).length > 0, {
-    message: 'Variables must contain at least one key-value pair',
-  }),
-});
+// ============================================
+// Config DTOs
+// ============================================
 
-// Update Config DTO (PATCH - partial)
-export const patchConfigSchema = z.object({
+// Create Config DTO - omit id and timestamps, add variables
+export const CreateConfigDTO = ConfigSchema
+  .omit({ id: true, createdAt: true, updatedAt: true })
+  .extend({
+    variables: z.record(z.string(), z.any()).refine(
+      (vars) => Object.keys(vars).length > 0,
+      { message: 'Variables must contain at least one key-value pair' }
+    ),
+  });
+export type CreateConfigDTO = z.infer<typeof CreateConfigDTO>;
+
+// Patch Config DTO - partial update (merge variables)
+export const PatchConfigDTO = z.object({
   name: z.string().min(1).max(200).optional(),
   description: z.string().max(1000).optional(),
   variables: z.record(z.string(), z.any()).optional(),
 });
+export type PatchConfigDTO = z.infer<typeof PatchConfigDTO>;
 
-// Replace Config DTO (PUT - full replace)
-export const replaceConfigSchema = z.object({
+// Replace Config DTO - full replacement
+export const ReplaceConfigDTO = z.object({
   name: z.string().min(1).max(200).optional(),
   description: z.string().max(1000).optional(),
-  variables: z.record(z.string(), z.any()).refine((vars) => Object.keys(vars).length > 0, {
-    message: 'Variables must contain at least one key-value pair',
-  }),
+  variables: z.record(z.string(), z.any()).refine(
+    (vars) => Object.keys(vars).length > 0,
+    { message: 'Variables must contain at least one key-value pair' }
+  ),
 });
+export type ReplaceConfigDTO = z.infer<typeof ReplaceConfigDTO>;
 
-// Update Config Variable DTO
-export const updateConfigVariableSchema = z.object({
+// Update single config variable
+export const UpdateConfigVariableDTO = z.object({
   value: z.any(),
 });
-
-export type CreateWorkflowDTO = z.infer<typeof createWorkflowSchema>;
-export type UpdateWorkflowDTO = z.infer<typeof updateWorkflowSchema>;
-export type ExecuteWorkflowDTO = z.infer<typeof executeWorkflowSchema>;
-export type CreateNodeExecutorDTO = z.infer<typeof createNodeExecutorSchema>;
-export type NodeDTO = z.infer<typeof nodeSchema>;
-export type CreateConfigDTO = z.infer<typeof createConfigSchema>;
-export type PatchConfigDTO = z.infer<typeof patchConfigSchema>;
-export type ReplaceConfigDTO = z.infer<typeof replaceConfigSchema>;
-export type UpdateConfigVariableDTO = z.infer<typeof updateConfigVariableSchema>;
+export type UpdateConfigVariableDTO = z.infer<typeof UpdateConfigVariableDTO>;

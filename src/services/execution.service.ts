@@ -3,8 +3,7 @@ import { NodeExecutionRepository } from '../repositories/node-execution.reposito
 import { WorkflowRepository } from '../repositories/workflow.repository';
 import { WorkflowOrchestrator } from '../orchestration/workflow-orchestrator';
 import { ConfigService } from './config.service';
-import { generateId } from '../utils/helpers';
-import type { Execution, NodeExecution } from '../db/schema';
+import type { ExecutionModel, NodeExecutionModel } from '../domain/entities';
 
 export class ExecutionService {
   constructor(
@@ -19,55 +18,41 @@ export class ExecutionService {
     workflowId: string,
     parameters: Record<string, any>,
     configId?: string
-  ): Promise<Execution> {
-    // Get workflow
+  ): Promise<ExecutionModel> {
     const workflow = await this.workflowRepo.findById(workflowId);
     if (!workflow) {
       throw new Error('Workflow not found');
     }
 
-    // Determine which config to use (priority: execution override > workflow default > none)
     const resolvedConfigId = configId || workflow.defaultConfigId || null;
 
-    // Load config variables
+    // Fetch config variables separately
     const configVariables = await this.configService.getConfigVariables(resolvedConfigId);
 
-    // Merge parameters with config variables
-    // Parameters take precedence over config variables
-    const mergedContext = {
-      parameters: parameters,
-      config: configVariables,
-    };
-
-    // Create execution record
+    // Create execution with separate parameters and config
     const execution = await this.executionRepo.create({
-      id: generateId(),
       workflowId: workflowId,
       status: 'pending',
-      startedAt: new Date(),
-      parameters: mergedContext, // Store merged context
+      parameters: parameters,
+      config: configVariables,
       configId: resolvedConfigId,
       result: null,
       error: null,
       completedAt: null,
     });
 
-    // Update status to running
     await this.executionRepo.updateStatus(execution.id, 'running');
 
-    // Execute workflow asynchronously
     try {
       await this.orchestrator.execute(workflow, execution);
     } catch (error: any) {
-      // Error handling is done in orchestrator
       console.error('Workflow execution failed:', error);
     }
 
-    // Return the execution record
     return await this.executionRepo.findById(execution.id) || execution;
   }
 
-  async getExecution(id: string): Promise<Execution> {
+  async getExecution(id: string): Promise<ExecutionModel> {
     const execution = await this.executionRepo.findById(id);
     if (!execution) {
       throw new Error('Execution not found');
@@ -75,11 +60,10 @@ export class ExecutionService {
     return execution;
   }
 
-  async listExecutionsByWorkflow(workflowId: string): Promise<Array<Execution & { node_results: NodeExecution[] }>> {
+  async listExecutionsByWorkflow(workflowId: string): Promise<Array<ExecutionModel & { node_results: NodeExecutionModel[] }>> {
     const executions = await this.executionRepo.findByWorkflowId(workflowId);
-    
-    // Fetch node executions for each execution
-    const results = await Promise.all(
+
+    return await Promise.all(
       executions.map(async (execution) => {
         const nodeResults = await this.nodeExecRepo.findByExecutionId(execution.id);
         return {
@@ -88,7 +72,5 @@ export class ExecutionService {
         };
       })
     );
-
-    return results;
   }
 }

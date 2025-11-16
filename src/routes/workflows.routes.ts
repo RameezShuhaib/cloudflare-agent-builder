@@ -1,13 +1,13 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { WorkflowService } from '../services/workflow.service';
-import { createWorkflowSchema, updateWorkflowSchema } from '../schemas/dtos';
+import { CreateWorkflowDTO, UpdateWorkflowDTO } from '../schemas/dtos';
 
 export function workflowRoutes(workflowService: WorkflowService) {
   const app = new Hono();
 
   // POST /api/workflows - Create workflow
-  app.post('/', zValidator('json', createWorkflowSchema), async (c) => {
+  app.post('/', zValidator('json', CreateWorkflowDTO), async (c) => {
     try {
       const dto = c.req.valid('json');
       const workflow = await workflowService.createWorkflow(dto);
@@ -39,7 +39,7 @@ export function workflowRoutes(workflowService: WorkflowService) {
   });
 
   // PUT /api/workflows/:id - Update workflow
-  app.put('/:id', zValidator('json', updateWorkflowSchema), async (c) => {
+  app.put('/:id', zValidator('json', UpdateWorkflowDTO), async (c) => {
     try {
       const id = c.req.param('id');
       const dto = c.req.valid('json');

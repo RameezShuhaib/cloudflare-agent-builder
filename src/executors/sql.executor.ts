@@ -1,19 +1,16 @@
-import { NodeExecutor } from './node-executor.interface';
-import { TemplateParser } from '../utils/template-parser';
+import { NodeExecutor } from './base-node-executor';
 import { z } from 'zod';
 import Env from '../env';
 
 export class SQLExecutor extends NodeExecutor {
   readonly type = 'sql_query';
   readonly description = 'Execute SQL queries on D1 database with template variable support';
-  
+
   private db: D1Database;
-  private parser: TemplateParser;
 
   constructor(env: Env) {
 		super(env)
     this.db = env.DB;
-    this.parser = new TemplateParser();
   }
 
   getConfigSchema() {
@@ -31,9 +28,7 @@ export class SQLExecutor extends NodeExecutor {
 
     this.validateQuery(query);
 
-    const parsedQuery = this.parser.parse(query, input) as string;
-
-    const result = await this.db.prepare(parsedQuery).all();
+    const result = await this.db.prepare(query).all();
 
     return result.results;
   }

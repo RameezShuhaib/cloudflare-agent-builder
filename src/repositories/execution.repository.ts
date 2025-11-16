@@ -1,41 +1,24 @@
-import { drizzle } from 'drizzle-orm/d1';
 import { eq } from 'drizzle-orm';
-import { executions, type Execution, type NewExecution } from '../db/schema';
+import { executions } from '../db/schema';
+import { ExecutionModel } from '../domain/entities';
+import { BaseRepository } from './baase.repository';
 
-export class ExecutionRepository {
-  private db;
+export class ExecutionRepository extends BaseRepository<typeof executions, ExecutionModel> {
+	constructor(d1Database: D1Database) {
+		super(d1Database, executions);
+	}
 
-  constructor(d1Database: D1Database) {
-    this.db = drizzle(d1Database);
-  }
+	async findByWorkflowId(workflowId: string): Promise<ExecutionModel[]> {
+		return this.db
+			.select()
+			.from(executions)
+			.where(eq(executions.workflowId, workflowId)) as unknown as ExecutionModel[];
+	}
 
-  async create(execution: NewExecution): Promise<Execution> {
-    const result = await this.db.insert(executions).values(execution).returning();
-    return result[0];
-  }
-
-  async findById(id: string): Promise<Execution | undefined> {
-    const result = await this.db.select().from(executions).where(eq(executions.id, id)).limit(1);
-    return result[0];
-  }
-
-  async findByWorkflowId(workflowId: string): Promise<Execution[]> {
-    return this.db.select().from(executions).where(eq(executions.workflowId, workflowId));
-  }
-
-  async update(id: string, data: Partial<NewExecution>): Promise<Execution | undefined> {
-    const result = await this.db
-      .update(executions)
-      .set(data)
-      .where(eq(executions.id, id))
-      .returning();
-    return result[0];
-  }
-
-  async updateStatus(id: string, status: 'pending' | 'running' | 'completed' | 'failed'): Promise<void> {
-    await this.db
-      .update(executions)
-      .set({ status })
-      .where(eq(executions.id, id));
-  }
+	async updateStatus(id: string, status: 'pending' | 'running' | 'completed' | 'failed'): Promise<void> {
+		await this.db
+			.update(executions)
+			.set({ status })
+			.where(eq(executions.id, id));
+	}
 }

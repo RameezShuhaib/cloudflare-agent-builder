@@ -1,5 +1,4 @@
-import { NodeExecutor } from './node-executor.interface';
-import { TemplateParser } from '../utils/template-parser';
+import { NodeExecutor } from './base-node-executor';
 import OpenAI from 'openai';
 import { z } from 'zod';
 import Env from '../env';
@@ -37,13 +36,11 @@ export class LLMExecutor extends NodeExecutor {
   readonly type = 'llm';
   readonly description = 'Execute LLM requests with support for multiple providers (Workers AI, OpenAI)';
 
-  private parser: TemplateParser;
   private readonly ai?: Ai;
 
   constructor(env: Env) {
 		super(env)
 
-    this.parser = new TemplateParser();
     this.ai = env.AI;
   }
 
@@ -78,13 +75,12 @@ export class LLMExecutor extends NodeExecutor {
     if (config.messages && Array.isArray(config.messages)) {
       return config.messages.map((msg) => ({
         role: msg.role,
-        content: this.parser.parse(msg.content, input) as string,
+        content: msg.content,
       }));
     }
 
     if (config.prompt) {
-      const parsedPrompt = this.parser.parse(config.prompt, input) as string;
-      return [{ role: 'user', content: parsedPrompt }];
+      return [{ role: 'user', content: config.prompt }];
     }
 
     throw new Error('LLMExecutor requires either prompt or messages in config');
@@ -166,23 +162,14 @@ export class LLMExecutor extends NodeExecutor {
       throw new Error('Workers AI binding not available');
     }
 
-    // Prepare the request payload
     const payload: any = {
       messages: messages,
       max_tokens: config.max_tokens || 1000,
       temperature: config.temperature,
     };
 
-    // Add response_format if provided (JSON Mode)
     if (config.response_format) {
-      // Convert Zod schema to JSON schema if needed
       let jsonSchema = config.response_format;
-
-      if (this.isZodSchema(jsonSchema)) {
-        // For Zod schemas, we need to extract the JSON schema
-        // This is a simplified version - in production, use zod-to-json-schema
-        throw new Error('Zod schemas not yet supported with Workers AI binding. Use provider: "openai-sdk" instead.');
-      }
 
       payload.response_format = {
         type: 'json_schema',

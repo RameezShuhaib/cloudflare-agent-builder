@@ -4,15 +4,12 @@ import Env from './env';
 import { WorkflowRepository } from './repositories/workflow.repository';
 import { ExecutionRepository } from './repositories/execution.repository';
 import { NodeExecutionRepository } from './repositories/node-execution.repository';
-import { NodeExecutorRepository } from './repositories/node-executor.repository';
 import { ConfigRepository } from './repositories/config.repository';
 import { WorkflowService } from './services/workflow.service';
 import { ExecutionService } from './services/execution.service';
-import { NodeExecutorService } from './services/node-executor.service';
 import { ConfigService } from './services/config.service';
 import { WorkflowOrchestrator } from './orchestration/workflow-orchestrator';
 import { NodeExecutorFactory } from './orchestration/node-executor.factory';
-import { TemplateParser } from './utils/template-parser';
 import { workflowRoutes } from './routes/workflows.routes';
 import { executionRoutes } from './routes/executions.routes';
 import { nodeExecutorRoutes } from './routes/node-executors.routes';
@@ -22,7 +19,6 @@ import { configRoutes } from './routes/configs.routes';
 type Variables = {
   workflowService: WorkflowService;
   executionService: ExecutionService;
-  nodeExecutorService: NodeExecutorService;
   configService: ConfigService;
 };
 
@@ -45,25 +41,16 @@ app.use('*', async (c, next) => {
   const workflowRepo = new WorkflowRepository(db);
   const executionRepo = new ExecutionRepository(db);
   const nodeExecRepo = new NodeExecutionRepository(db);
-  const nodeExecutorRepo = new NodeExecutorRepository(db);
   const configRepo = new ConfigRepository(db);
 
-  // Initialize services
   const configService = new ConfigService(configRepo, kv);
 
-  // Initialize orchestration components
-  const templateParser = new TemplateParser();
-  const nodeExecutorFactory = new NodeExecutorFactory(
-    nodeExecutorRepo,
-    workflowRepo,
-    nodeExecRepo,
-    executionRepo,
-		c.env
-  );
+  const nodeExecutorFactory = new NodeExecutorFactory(c.env);
   const orchestrator = new WorkflowOrchestrator(
-    nodeExecRepo,
-    executionRepo,
-    nodeExecutorFactory,
+		nodeExecRepo,
+		executionRepo,
+		nodeExecutorFactory,
+		workflowRepo,
   );
 
   const workflowService = new WorkflowService(workflowRepo);
@@ -74,12 +61,10 @@ app.use('*', async (c, next) => {
     orchestrator,
     configService
   );
-  const nodeExecutorService = new NodeExecutorService(nodeExecutorRepo, workflowRepo);
 
   // Store services in context for routes
   c.set('workflowService', workflowService);
   c.set('executionService', executionService);
-  c.set('nodeExecutorService', nodeExecutorService);
   c.set('configService', configService);
 
   await next();

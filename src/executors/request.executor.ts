@@ -1,6 +1,5 @@
 import { z } from 'zod';
-import { NodeExecutor } from './node-executor.interface';
-import { TemplateParser } from '../utils/template-parser';
+import { NodeExecutor } from './base-node-executor';
 
 
 const httpRequestConfigSchema = z.object({
@@ -18,11 +17,8 @@ export class RequestExecutor extends NodeExecutor {
   readonly type = 'http_request';
   readonly description = 'Make HTTP requests with template variable support';
 
-  private parser: TemplateParser;
-
   constructor(env: Env) {
 		super(env)
-    this.parser = new TemplateParser();
   }
 
   getConfigSchema() {
@@ -30,28 +26,26 @@ export class RequestExecutor extends NodeExecutor {
   }
 
   async execute(config: Record<string, any>, input: Record<string, any>): Promise<any> {
-    const { url, method = 'GET', headers = {}, body } = config;
+    const { url, method = 'GET', headers = {}, body } = config as HttpRequestConfig;
 
     if (!url) {
       throw new Error('RequestExecutor requires a url in config');
     }
 
-    const parsedUrl = this.parser.parse(url, input) as string;
-    const parsedHeaders = this.parser.parseObject(headers, input);
-    const parsedBody = body ? this.parser.parse(body, input) : undefined;
-
+    // Config is already parsed by BaseNodeExecutor.run()
+    // url, headers, and body are already resolved
     const requestInit: RequestInit = {
       method: method.toUpperCase(),
-      headers: parsedHeaders,
+      headers: headers,
     };
 
-    if (parsedBody && method.toUpperCase() !== 'GET' && method.toUpperCase() !== 'HEAD') {
-      requestInit.body = typeof parsedBody === 'string'
-        ? parsedBody
-        : JSON.stringify(parsedBody);
+    if (body && method.toUpperCase() !== 'GET' && method.toUpperCase() !== 'HEAD') {
+      requestInit.body = typeof body === 'string'
+        ? body
+        : JSON.stringify(body);
     }
 
-    const response = await fetch(parsedUrl, requestInit);
+    const response = await fetch(url, requestInit);
 
     const contentType = response.headers.get('content-type');
     let responseData;
