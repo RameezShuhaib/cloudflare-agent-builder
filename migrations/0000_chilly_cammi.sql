@@ -6,14 +6,16 @@ CREATE TABLE `configs` (
 	`updated_at` integer NOT NULL
 );
 --> statement-breakpoint
+CREATE UNIQUE INDEX `configs_name_unique` ON `configs` (`name`);--> statement-breakpoint
 CREATE INDEX `idx_configs_created_at` ON `configs` (`created_at`);--> statement-breakpoint
 CREATE TABLE `executions` (
 	`id` text PRIMARY KEY NOT NULL,
 	`workflow_id` text NOT NULL,
 	`status` text NOT NULL,
-	`started_at` integer NOT NULL,
+	`created_at` integer NOT NULL,
 	`completed_at` integer,
 	`parameters` text NOT NULL,
+	`config` text,
 	`config_id` text,
 	`result` text,
 	`error` text,
@@ -22,7 +24,7 @@ CREATE TABLE `executions` (
 --> statement-breakpoint
 CREATE INDEX `idx_executions_workflow_id` ON `executions` (`workflow_id`);--> statement-breakpoint
 CREATE INDEX `idx_executions_status` ON `executions` (`status`);--> statement-breakpoint
-CREATE INDEX `idx_executions_started_at` ON `executions` (`started_at`);--> statement-breakpoint
+CREATE INDEX `idx_executions_created_at` ON `executions` (`created_at`);--> statement-breakpoint
 CREATE INDEX `idx_executions_config_id` ON `executions` (`config_id`);--> statement-breakpoint
 CREATE TABLE `node_executions` (
 	`id` text PRIMARY KEY NOT NULL,
@@ -31,33 +33,22 @@ CREATE TABLE `node_executions` (
 	`status` text NOT NULL,
 	`output` text,
 	`error` text,
-	`started_at` integer NOT NULL,
+	`created_at` integer NOT NULL,
 	`completed_at` integer,
 	FOREIGN KEY (`execution_id`) REFERENCES `executions`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
 CREATE INDEX `idx_node_executions_execution_id` ON `node_executions` (`execution_id`);--> statement-breakpoint
 CREATE INDEX `idx_node_executions_status` ON `node_executions` (`status`);--> statement-breakpoint
-CREATE TABLE `node_executors` (
-	`type` text PRIMARY KEY NOT NULL,
-	`name` text NOT NULL,
-	`description` text,
-	`category` text NOT NULL,
-	`config_schema` text NOT NULL,
-	`is_builtin` integer DEFAULT false NOT NULL,
-	`source_workflow_id` text,
-	`created_at` integer NOT NULL,
-	FOREIGN KEY (`source_workflow_id`) REFERENCES `workflows`(`id`) ON UPDATE no action ON DELETE cascade
-);
---> statement-breakpoint
-CREATE INDEX `idx_node_executors_category` ON `node_executors` (`category`);--> statement-breakpoint
-CREATE INDEX `idx_node_executors_source_workflow` ON `node_executors` (`source_workflow_id`);--> statement-breakpoint
 CREATE TABLE `workflows` (
 	`id` text PRIMARY KEY NOT NULL,
 	`name` text NOT NULL,
-	`parameter_schema` text NOT NULL,
+	`parameter_schema` text,
 	`nodes` text NOT NULL,
-	`output_node` text NOT NULL,
+	`edges` text NOT NULL,
+	`start_node` text NOT NULL,
+	`end_node` text NOT NULL,
+	`max_iterations` integer DEFAULT 100 NOT NULL,
 	`default_config_id` text,
 	`created_at` integer NOT NULL,
 	`updated_at` integer NOT NULL

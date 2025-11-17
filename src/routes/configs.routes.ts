@@ -11,7 +11,6 @@ import {
 export function configRoutes(configService: ConfigService) {
   const app = new Hono();
 
-  // POST /api/configs - Create config
   app.post('/', zValidator('json', CreateConfigDTO), async (c) => {
     try {
       const dto = c.req.valid('json');
@@ -22,7 +21,6 @@ export function configRoutes(configService: ConfigService) {
     }
   });
 
-  // GET /api/configs - List configs (metadata only, no variables)
   app.get('/', async (c) => {
     try {
       const configs = await configService.listConfigs();
@@ -32,7 +30,6 @@ export function configRoutes(configService: ConfigService) {
     }
   });
 
-  // GET /api/configs/:id - Get config (with variables)
   app.get('/:id', async (c) => {
     try {
       const id = c.req.param('id');
@@ -46,7 +43,6 @@ export function configRoutes(configService: ConfigService) {
     }
   });
 
-  // PATCH /api/configs/:id - Partial update (merge variables)
   app.patch('/:id', zValidator('json', PatchConfigDTO), async (c) => {
     try {
       const id = c.req.param('id');
@@ -58,7 +54,6 @@ export function configRoutes(configService: ConfigService) {
     }
   });
 
-  // PUT /api/configs/:id - Full replace
   app.put('/:id', zValidator('json', ReplaceConfigDTO), async (c) => {
     try {
       const id = c.req.param('id');
@@ -70,7 +65,6 @@ export function configRoutes(configService: ConfigService) {
     }
   });
 
-  // DELETE /api/configs/:id - Delete config
   app.delete('/:id', async (c) => {
     try {
       const id = c.req.param('id');
@@ -81,7 +75,6 @@ export function configRoutes(configService: ConfigService) {
     }
   });
 
-  // GET /api/configs/:id/variables/:key - Get single variable
   app.get('/:id/variables/:key', async (c) => {
     try {
       const id = c.req.param('id');
@@ -93,7 +86,6 @@ export function configRoutes(configService: ConfigService) {
     }
   });
 
-  // PUT /api/configs/:id/variables/:key - Update single variable
   app.put('/:id/variables/:key', zValidator('json', UpdateConfigVariableDTO), async (c) => {
     try {
       const id = c.req.param('id');
@@ -106,7 +98,6 @@ export function configRoutes(configService: ConfigService) {
     }
   });
 
-  // DELETE /api/configs/:id/variables/:key - Delete single variable
   app.delete('/:id/variables/:key', async (c) => {
     try {
       const id = c.req.param('id');

@@ -1,7 +1,6 @@
 import { NodeExecutor } from './base-node-executor';
 import OpenAI from 'openai';
 import { z } from 'zod';
-import Env from '../env';
 
 
 const llmConfigSchema = z.object({

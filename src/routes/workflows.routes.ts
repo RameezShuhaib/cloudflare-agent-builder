@@ -6,7 +6,6 @@ import { CreateWorkflowDTO, UpdateWorkflowDTO } from '../schemas/dtos';
 export function workflowRoutes(workflowService: WorkflowService) {
   const app = new Hono();
 
-  // POST /api/workflows - Create workflow
   app.post('/', zValidator('json', CreateWorkflowDTO), async (c) => {
     try {
       const dto = c.req.valid('json');
@@ -17,7 +16,6 @@ export function workflowRoutes(workflowService: WorkflowService) {
     }
   });
 
-  // GET /api/workflows - List workflows
   app.get('/', async (c) => {
     try {
       const workflows = await workflowService.listWorkflows();
@@ -27,7 +25,6 @@ export function workflowRoutes(workflowService: WorkflowService) {
     }
   });
 
-  // GET /api/workflows/:id - Get workflow
   app.get('/:id', async (c) => {
     try {
       const id = c.req.param('id');
@@ -38,7 +35,6 @@ export function workflowRoutes(workflowService: WorkflowService) {
     }
   });
 
-  // PUT /api/workflows/:id - Update workflow
   app.put('/:id', zValidator('json', UpdateWorkflowDTO), async (c) => {
     try {
       const id = c.req.param('id');
@@ -50,7 +46,6 @@ export function workflowRoutes(workflowService: WorkflowService) {
     }
   });
 
-  // DELETE /api/workflows/:id - Delete workflow
   app.delete('/:id', async (c) => {
     try {
       const id = c.req.param('id');

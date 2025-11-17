@@ -1,14 +1,14 @@
 import { WorkflowRepository } from '../repositories/workflow.repository';
-import type { CreateWorkflowDTO, UpdateWorkflowDTO } from '../schemas/dtos';
-import type { WorkflowModel } from '../domain/entities';
+import type { CreateWorkflowDTO, NodeDTO, UpdateWorkflowDTO } from '../schemas/dtos';
+import type { Edge, WorkflowModel } from '../domain/entities';
 
 export class WorkflowService {
   constructor(private workflowRepo: WorkflowRepository) {}
 
   async createWorkflow(dto: CreateWorkflowDTO): Promise<WorkflowModel> {
-    this.validateWorkflowSchema(dto);
+    this.validateWorkflow(dto);
 
-    return await this.workflowRepo.create(dto);
+    return await this.workflowRepo.create({ ...dto, state: {}, maxIterations: 50 });
   }
 
   async getWorkflow(id: string): Promise<WorkflowModel> {
@@ -47,46 +47,38 @@ export class WorkflowService {
     await this.workflowRepo.delete(id);
   }
 
-  private validateWorkflowSchema(dto: CreateWorkflowDTO): void {
-    // Validate that output_node exists in nodes
-    const nodeIds = dto.nodes.map((n) => n.id);
-    if (!nodeIds.includes(dto.outputNode)) {
-      throw new Error('output_node must reference an existing node');
-    }
+	public validateWorkflow(workflow: CreateWorkflowDTO): void {
+		const nodeIds = new Set((workflow.nodes as NodeDTO[]).map((n) => n.id));
+		const edges = workflow.edges as Edge[];
 
-    // Validate that all node dependencies exist
-    for (const node of dto.nodes) {
-      for (const dep of node.dependencies) {
-        if (!nodeIds.includes(dep)) {
-          throw new Error(`Node ${node.id} has invalid dependency: ${dep}`);
-        }
-      }
-    }
+		if (!nodeIds.has(workflow.startNode)) {
+			throw new Error(`Start node '${workflow.startNode}' does not exist in workflow`);
+		}
 
-    // Check for circular dependencies (basic check)
-    const visited = new Set<string>();
-    const visiting = new Set<string>();
+		if (!nodeIds.has(workflow.endNode)) {
+			throw new Error(`End node '${workflow.endNode}' does not exist in workflow`);
+		}
 
-    const hasCycle = (nodeId: string): boolean => {
-      if (visiting.has(nodeId)) return true;
-      if (visited.has(nodeId)) return false;
+		for (const edge of edges) {
+			if (!nodeIds.has(edge.from)) {
+				throw new Error(`Edge '${edge.id}' references non-existent 'from' node: ${edge.from}`);
+			}
 
-      visiting.add(nodeId);
-      const node = dto.nodes.find((n) => n.id === nodeId);
-      if (node) {
-        for (const dep of node.dependencies) {
-          if (hasCycle(dep)) return true;
-        }
-      }
-      visiting.delete(nodeId);
-      visited.add(nodeId);
-      return false;
-    };
+			if ('to' in edge && !nodeIds.has(edge.to)) {
+				throw new Error(`Edge '${edge.id}' references non-existent 'to' node: ${edge.to}`);
+			}
+		}
 
-    for (const node of dto.nodes) {
-      if (hasCycle(node.id)) {
-        throw new Error('Circular dependency detected in workflow');
-      }
-    }
-  }
+		const outgoingEdgesCount = new Map<string, number>();
+		for (const edge of edges) {
+			const count = outgoingEdgesCount.get(edge.from) || 0;
+			outgoingEdgesCount.set(edge.from, count + 1);
+		}
+
+		for (const [nodeId, count] of outgoingEdgesCount.entries()) {
+			if (count > 1) {
+				throw new Error(`Node '${nodeId}' has ${count} outgoing edges. Each node can only have one outgoing edge.`);
+			}
+		}
+	}
 }

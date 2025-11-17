@@ -6,8 +6,43 @@ export const NodeSchema = z.object({
   id: z.string(),
   type: z.string(),
   config: z.record(z.string(), z.any()),
-  dependencies: z.array(z.string()),
+  setState: z.array(
+    z.object({
+      key: z.string(),
+      rule: z.array(z.any()),
+    })
+  ).optional(),
 });
+
+
+// Edge schemas - discriminated union for static vs dynamic edges
+export const StaticEdgeSchema = z.object({
+  id: z.string(),
+  from: z.string(),
+  to: z.string(),
+});
+
+export const DynamicEdgeSchema = z.object({
+  id: z.string(),
+  from: z.string(),
+  rule: z.array(z.any()),
+});
+
+export const EdgeSchema = z.discriminatedUnion('type', [
+  StaticEdgeSchema.extend({ type: z.literal('static') }),
+  DynamicEdgeSchema.extend({ type: z.literal('dynamic') }),
+]);
+
+// For convenience, also allow edges without explicit type field
+// The type will be inferred from presence of 'to' vs 'rule'
+export const EdgeInputSchema = z.union([
+  StaticEdgeSchema,
+  DynamicEdgeSchema,
+]);
+
+export type StaticEdge = z.infer<typeof StaticEdgeSchema>;
+export type DynamicEdge = z.infer<typeof DynamicEdgeSchema>;
+export type Edge = StaticEdge | DynamicEdge;
 
 
 export const WorkflowSchema = withTimestamps(
@@ -16,8 +51,12 @@ export const WorkflowSchema = withTimestamps(
     name: z.string(),
     parameterSchema: z.record(z.string(), z.any()),
     nodes: z.array(NodeSchema),
-    outputNode: z.string(),
-    defaultConfigId: toOptional(z.string()),
+    edges: z.array(EdgeInputSchema),
+    startNode: z.string(),
+    endNode: z.string(),
+		state: z.record(z.string(), z.any()).default({}),
+    maxIterations: z.number().int().positive(),
+    defaultConfigId: z.string(),
   })
 );
 export type WorkflowModel = z.infer<typeof WorkflowSchema>;

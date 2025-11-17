@@ -1,4 +1,3 @@
-import Env from '../env';
 import { NodeExecutor } from '../executors/base-node-executor';
 import { DataTransformerExecutor } from '../executors/data-transformer.executor';
 import { SQLExecutor } from '../executors/sql.executor';

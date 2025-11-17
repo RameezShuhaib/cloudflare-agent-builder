@@ -26,10 +26,8 @@ export class ExecutionService {
 
     const resolvedConfigId = configId || workflow.defaultConfigId || null;
 
-    // Fetch config variables separately
     const configVariables = await this.configService.getConfigVariables(resolvedConfigId);
 
-    // Create execution with separate parameters and config
     const execution = await this.executionRepo.create({
       workflowId: workflowId,
       status: 'pending',

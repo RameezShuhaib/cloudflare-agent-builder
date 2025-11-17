@@ -1,6 +1,5 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import Env from './env';
 import { WorkflowRepository } from './repositories/workflow.repository';
 import { ExecutionRepository } from './repositories/execution.repository';
 import { NodeExecutionRepository } from './repositories/node-execution.repository';
@@ -12,7 +11,6 @@ import { WorkflowOrchestrator } from './orchestration/workflow-orchestrator';
 import { NodeExecutorFactory } from './orchestration/node-executor.factory';
 import { workflowRoutes } from './routes/workflows.routes';
 import { executionRoutes } from './routes/executions.routes';
-import { nodeExecutorRoutes } from './routes/node-executors.routes';
 import { configRoutes } from './routes/configs.routes';
 
 
@@ -44,16 +42,16 @@ app.use('*', async (c, next) => {
   const configRepo = new ConfigRepository(db);
 
   const configService = new ConfigService(configRepo, kv);
+	const workflowService = new WorkflowService(workflowRepo);
 
   const nodeExecutorFactory = new NodeExecutorFactory(c.env);
   const orchestrator = new WorkflowOrchestrator(
 		nodeExecRepo,
 		executionRepo,
 		nodeExecutorFactory,
-		workflowRepo,
+		workflowService,
   );
 
-  const workflowService = new WorkflowService(workflowRepo);
   const executionService = new ExecutionService(
     executionRepo,
     nodeExecRepo,
@@ -62,7 +60,6 @@ app.use('*', async (c, next) => {
     configService
   );
 
-  // Store services in context for routes
   c.set('workflowService', workflowService);
   c.set('executionService', executionService);
   c.set('configService', configService);
@@ -73,39 +70,7 @@ app.use('*', async (c, next) => {
 // Mount routes
 app.route('/api/workflows', workflowRoutes(app.get('workflowService') as any));
 app.route('/api/executions', executionRoutes(app.get('executionService') as any));
-app.route('/api/node-executors', nodeExecutorRoutes(app.get('nodeExecutorService') as any));
 app.route('/api/configs', configRoutes(app.get('configService') as any));
-
-// Workflow execution route (special case - under workflows)
-app.post('/api/workflows/:id/execute', async (c) => {
-  const executionService = c.get('executionService');
-  const workflowId = c.req.param('id');
-  const body = await c.req.json();
-
-  try {
-    const execution = await executionService.executeWorkflow(
-      workflowId,
-      body.parameters || {},
-      body.config_id
-    );
-    return c.json(execution, 201);
-  } catch (error: any) {
-    return c.json({ error: error.message }, 400);
-  }
-});
-
-// Workflow executions list route
-app.get('/api/workflows/:id/executions', async (c) => {
-  const executionService = c.get('executionService');
-  const workflowId = c.req.param('id');
-
-  try {
-    const executions = await executionService.listExecutionsByWorkflow(workflowId);
-    return c.json(executions);
-  } catch (error: any) {
-    return c.json({ error: error.message }, 500);
-  }
-});
 
 // 404 handler
 app.notFound((c) => {

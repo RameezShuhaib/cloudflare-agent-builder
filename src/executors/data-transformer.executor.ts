@@ -1,6 +1,5 @@
 import { NodeExecutor } from './base-node-executor';
 import { z } from 'zod';
-import Env from '../env';
 
 export class DataTransformerExecutor extends NodeExecutor {
   readonly type = 'data_transformer';

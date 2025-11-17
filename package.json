@@ -10,9 +10,7 @@
 		"test": "vitest",
 		"cf-typegen": "wrangler types",
 		"db:generate": "drizzle-kit generate",
-		"db:migrate:local": "wrangler d1 execute agent-builder-db --local --file=./schema.sql",
-		"db:migrate:remote": "wrangler d1 execute agent-builder-db --remote --file=./schema.sql",
-		"db:studio": "drizzle-kit studio"
+		"db:migrate:remote": "wrangler d1 migrations apply agent-builder-db --remote"
 	},
 	"devDependencies": {
 		"@cloudflare/vitest-pool-workers": "^0.8.19",
@@ -22,6 +20,7 @@
 		"wrangler": "^4.46.0"
 	},
 	"dependencies": {
+		"@elite-libs/rules-machine": "^1.6.0",
 		"@hono/zod-validator": "^0.7.4",
 		"drizzle-orm": "^0.44.7",
 		"hono": "^4.10.4",

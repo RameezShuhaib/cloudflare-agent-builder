@@ -6,7 +6,6 @@ import { ExecuteWorkflowDTO } from '../schemas/dtos';
 export function executionRoutes(executionService: ExecutionService) {
   const app = new Hono();
 
-  // POST /api/workflows/:id/execute - Execute workflow
   app.post('/:id/execute', zValidator('json', ExecuteWorkflowDTO), async (c) => {
     try {
       const workflowId = c.req.param('id');
@@ -22,7 +21,6 @@ export function executionRoutes(executionService: ExecutionService) {
     }
   });
 
-  // GET /api/executions/:id - Get execution
   app.get('/:id', async (c) => {
     try {
       const id = c.req.param('id');
@@ -33,7 +31,6 @@ export function executionRoutes(executionService: ExecutionService) {
     }
   });
 
-  // GET /api/workflows/:id/executions - List executions for workflow
   app.get('/:id/executions', async (c) => {
     try {
       const workflowId = c.req.param('id');

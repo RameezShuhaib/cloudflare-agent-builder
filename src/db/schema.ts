@@ -6,11 +6,17 @@ export const workflows = sqliteTable('workflows', {
   name: text('name').notNull(),
   parameterSchema: text('parameter_schema', { mode: 'json' }).notNull(),
   nodes: text('nodes', { mode: 'json' }).notNull(),
-  outputNode: text('output_node').notNull(),
+  edges: text('edges', { mode: 'json' }).notNull(),
+  startNode: text('start_node').notNull(),
+  endNode: text('end_node').notNull(),
+  maxIterations: integer('max_iterations').notNull().default(100),
+	state: text('parameter_schema', { mode: 'json' }),
+	defaultConfigId: text('default_config_id'),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
 }, (table) => ({
   createdAtIdx: index('idx_workflows_created_at').on(table.createdAt),
+  defaultConfigIdx: index('idx_workflows_default_config').on(table.defaultConfigId),
 }));
 
 export const executions = sqliteTable('executions', {
