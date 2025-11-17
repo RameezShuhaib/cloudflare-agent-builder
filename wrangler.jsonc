@@ -28,5 +28,11 @@
 	"ai": {
 		"remote": true,
 		"binding": "AI"
+	},
+	"build": {
+		"command": ""
+	},
+	"alias": {
+		"@elite-libs/rules-machine": "./node_modules/@elite-libs/rules-machine/dist/index.mjs"
 	}
 }
