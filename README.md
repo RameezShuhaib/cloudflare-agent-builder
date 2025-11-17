@@ -8,7 +8,7 @@ A powerful workflow automation system built on Cloudflare Workers with D1 databa
 - **Conditional Routing**: Dynamic edge evaluation using rule engine for complex branching logic
 - **Cyclic Workflows**: Support for loops and iterative processes with configurable iteration limits
 - **State Management**: Workflow-scoped state with rule-based state updates
-- **Built-in Node Executors**: LLM, SQL, HTTP Request, Data Transformer, Workflow Executor
+- **Built-in Node Executors**: LLM, Text Embedding, Vectorize, SQL, HTTP Request, Data Transformer, Workflow Executor
 - **Sub-Workflows**: Execute workflows as nodes within other workflows
 - **Template Parsing**: Dynamic template resolution using `{{parent.node.field}}`, `{{state.key}}`, `{{parameters.x}}`
 - **Type Safety**: Full TypeScript support with Zod validation
@@ -250,7 +250,98 @@ Execute LLM calls with structured output support.
 }
 ```
 
-### 2. Data Transformer (`data_transformer`)
+### 2. Text Embedding (`text_embedding`)
+
+Generate text embeddings using Cloudflare Workers AI.
+
+```json
+{
+  "text": "{{parent.fetch_content.text}}",
+  "model": "@cf/baai/bge-base-en-v1.5"
+}
+```
+
+**Single text output:**
+```json
+{
+  "embedding": [0.123, -0.456, ...],
+  "dimensions": 768,
+  "model": "@cf/baai/bge-base-en-v1.5"
+}
+```
+
+**Multiple texts (array input):**
+```json
+{
+  "text": ["text1", "text2"],
+  "model": "@cf/baai/bge-base-en-v1.5"
+}
+```
+
+**Output:**
+```json
+{
+  "embeddings": [[0.123, ...], [0.456, ...]],
+  "shape": [2, 768],
+  "model": "@cf/baai/bge-base-en-v1.5",
+  "count": 2
+}
+```
+
+### 3. Vectorize (`vectorize`)
+
+Perform vector database operations using Cloudflare Vectorize.
+
+**Insert vectors:**
+```json
+{
+  "operation": "insert",
+  "indexBinding": "VECTORIZE_INDEX",
+  "vectors": [
+    {
+      "id": "doc_1",
+      "values": "{{parent.generate_embedding.embedding}}",
+      "metadata": {
+        "title": "{{parameters.title}}",
+        "category": "docs"
+      }
+    }
+  ],
+  "namespace": "production"
+}
+```
+
+**Query similar vectors:**
+```json
+{
+  "operation": "query",
+  "indexBinding": "VECTORIZE_INDEX",
+  "queryVector": "{{parent.generate_query_embedding.embedding}}",
+  "topK": 10,
+  "returnValues": false,
+  "returnMetadata": "all",
+  "filter": {
+    "category": { "$eq": "docs" }
+  },
+  "namespace": "production"
+}
+```
+
+**Supported operations:**
+- `insert`: Insert new vectors
+- `upsert`: Insert or update vectors
+- `query`: Similarity search with query vector
+- `queryById`: Find similar vectors to an existing vector
+- `getByIds`: Retrieve vectors by IDs
+- `deleteByIds`: Delete vectors by IDs
+- `describe`: Get index metadata
+
+**Filter operators:**
+- `$eq`, `$ne`: Equal, not equal
+- `$in`, `$nin`: In array, not in array
+- `$lt`, `$lte`, `$gt`, `$gte`: Comparison operators
+
+### 4. Data Transformer (`data_transformer`)
 
 Transform data using templates.
 
@@ -264,7 +355,7 @@ Transform data using templates.
 }
 ```
 
-### 3. SQL Query (`sql_query`)
+### 5. SQL Query (`sql_query`)
 
 Execute SQL queries on D1.
 
@@ -274,7 +365,7 @@ Execute SQL queries on D1.
 }
 ```
 
-### 4. HTTP Request (`http_request`)
+### 6. HTTP Request (`http_request`)
 
 Make HTTP requests.
 
@@ -291,7 +382,7 @@ Make HTTP requests.
 }
 ```
 
-### 5. Workflow Executor (`workflow_executor`)
+### 7. Workflow Executor (`workflow_executor`)
 
 Execute another workflow as a sub-workflow.
 
