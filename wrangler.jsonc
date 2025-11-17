@@ -32,6 +32,13 @@
 	"build": {
 		"command": ""
 	},
+	"vectorize": [
+		{
+			"binding": "DEFAULT_VECTORIZE_INDEX",
+			"index_name": "agent-builder-default-index",
+			"remote": true
+		}
+	],
 	"alias": {
 		"@elite-libs/rules-machine": "./node_modules/@elite-libs/rules-machine/dist/index.mjs"
 	}

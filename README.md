@@ -1,16 +1,40 @@
 # Agent Builder
 
-A powerful workflow automation system built on Cloudflare Workers with D1 database, Hono, Zod, and Drizzle ORM.
+A powerful workflow automation system built on Cloudflare Workers with D1 database, featuring graph-based execution with support for cycles, conditional routing, and state management.
 
 ## Features
 
-- **Workflow Management**: Create, update, and delete workflows with complex node dependencies
-- **Built-in Node Executors**: LLM (with structured output), SQL, HTTP Request, Data Transformer
-- **Custom Executors**: Turn any workflow into a reusable node executor
-- **Execution Engine**: Topological sorting and orchestrated execution of workflow nodes
-- **Template Parsing**: Dynamic template resolution using `{{parent.node.field}}` syntax
+- **Graph-Based Workflows**: Define workflows as directed graphs with explicit edges
+- **Conditional Routing**: Dynamic edge evaluation using rule engine for complex branching logic
+- **Cyclic Workflows**: Support for loops and iterative processes with configurable iteration limits
+- **State Management**: Workflow-scoped state with rule-based state updates
+- **Built-in Node Executors**: LLM, SQL, HTTP Request, Data Transformer, Workflow Executor
+- **Sub-Workflows**: Execute workflows as nodes within other workflows
+- **Template Parsing**: Dynamic template resolution using `{{parent.node.field}}`, `{{state.key}}`, `{{parameters.x}}`
 - **Type Safety**: Full TypeScript support with Zod validation
 - **AI Gateway Integration**: Built-in caching, analytics, and rate limiting
+
+## Architecture Highlights
+
+### Edge-Based Execution
+Unlike traditional DAG-based systems, workflows are defined as graphs with explicit edges:
+- **Static Edges**: Direct node-to-node connections
+- **Dynamic Edges**: Conditional routing based on rules evaluated at runtime
+- **Cycles Supported**: Enables retry logic, iterative processing, and state machines
+
+### State Management
+Powered by `@elite-libs/rules-machine`:
+- Workflow-scoped state persists across all nodes
+- Rules execute after node completion to update state
+- State accessible in templates: `{{state.counter}}`
+- Enables complex conditional logic and accumulation patterns
+
+### Workflow as Code
+Workflows are JSON/YAML definitions with:
+- Nodes (processing units)
+- Edges (static or dynamic connections)
+- Start/End nodes
+- Max iterations (safety limit)
 
 ## Tech Stack
 
@@ -19,6 +43,7 @@ A powerful workflow automation system built on Cloudflare Workers with D1 databa
 - **Database**: Cloudflare D1 (SQLite)
 - **ORM**: Drizzle ORM
 - **Validation**: Zod
+- **Rules Engine**: @elite-libs/rules-machine
 - **LLM Integration**: OpenAI SDK + Workers AI
 - **Language**: TypeScript
 
@@ -50,7 +75,7 @@ Copy the output `database_id` and update `wrangler.jsonc`:
 }
 ```
 
-### 3. Set Up AI Gateway
+### 3. Set Up AI Gateway (Optional)
 
 1. Go to Cloudflare Dashboard → AI → AI Gateway
 2. Create a new gateway
@@ -74,31 +99,23 @@ npx wrangler secret put CLOUDFLARE_API_TOKEN
 
 ### 4. Run Migrations
 
-Execute the schema locally:
-
 ```bash
+# Local
 npm run db:migrate:local
-```
 
-Execute the schema remotely:
-
-```bash
+# Remote
 npm run db:migrate:remote
 ```
 
 ### 5. Development
 
-Start local development server:
-
 ```bash
 npm run dev
 ```
 
-The API will be available at `http://localhost:8787`
+API available at `http://localhost:8787`
 
 ### 6. Deploy
-
-Deploy to Cloudflare Workers:
 
 ```bash
 npm run deploy
@@ -107,50 +124,115 @@ npm run deploy
 ## API Endpoints
 
 ### Workflows
-
-- `POST /api/workflows` - Create a new workflow
-- `GET /api/workflows` - List all workflows
-- `GET /api/workflows/:id` - Get workflow by ID
+- `POST /api/workflows` - Create workflow
+- `GET /api/workflows` - List workflows
+- `GET /api/workflows/:id` - Get workflow
 - `PUT /api/workflows/:id` - Update workflow
 - `DELETE /api/workflows/:id` - Delete workflow
 
 ### Executions
+- `POST /api/workflows/:id/execute` - Execute workflow
+- `GET /api/executions/:id` - Get execution
+- `GET /api/workflows/:id/executions` - List executions with node results
 
-- `POST /api/workflows/:id/execute` - Execute a workflow
-- `GET /api/executions/:id` - Get execution details
-- `GET /api/workflows/:id/executions` - List all executions for a workflow (includes node results)
+### Configs
+- `POST /api/configs` - Create config
+- `GET /api/configs` - List configs
+- `GET /api/configs/:id` - Get config with variables
+- `PATCH /api/configs/:id` - Partial update
+- `PUT /api/configs/:id` - Full replace
+- `DELETE /api/configs/:id` - Delete config
 
-### Node Executors
+## Workflow Structure
 
-- `GET /api/node-executors` - List all node executors (builtin + custom)
-- `GET /api/node-executors/:type` - Get node executor by type
-- `POST /api/node-executors` - Create custom node executor from workflow
-- `DELETE /api/node-executors/:type` - Delete custom node executor
+```json
+{
+  "name": "Workflow Name",
+  "parameterSchema": {
+    "type": "object",
+    "properties": {
+      "userId": { "type": "string" }
+    },
+    "required": ["userId"]
+  },
+  "nodes": [
+    {
+      "id": "node_1",
+      "type": "http_request",
+      "config": { /* executor config */ },
+      "setState": [
+        {
+          "key": "attempt",
+          "rule": [
+            { "if": "state.attempt", "then": "return state.attempt + 1" },
+            { "return": "1" }
+          ]
+        }
+      ]
+    }
+  ],
+  "edges": [
+    { "id": "e1", "from": "node_1", "to": "node_2" },
+    {
+      "id": "e2",
+      "from": "node_2",
+      "rule": [
+        { "if": "state.success === true", "then": "return 'end_node'" },
+        { "if": "state.attempt < 3", "then": "return 'node_1'" },
+        { "return": "'end_node'" }
+      ]
+    }
+  ],
+  "startNode": "node_1",
+  "endNode": "end_node",
+  "maxIterations": 100,
+  "defaultConfigId": "prod-config"
+}
+```
 
-## Built-in Node Executors
+### Nodes
 
-Built-in executors are defined in code and automatically available. Each executor defines its own configuration schema.
+Each node has:
+- `id`: Unique identifier
+- `type`: Executor type (builtin or `workflow_executor`)
+- `config`: Executor-specific configuration (supports templates)
+- `setState` (optional): Array of state updates with rules
 
-### 1. LLM Enhancement (`llm_enhancement`)
+### Edges
 
-Execute LLM calls with structured output support using OpenAI SDK or Workers AI.
+**Static Edge:**
+```json
+{
+  "id": "edge_1",
+  "from": "node_a",
+  "to": "node_b"
+}
+```
 
-**Features:**
-- OpenAI SDK integration with AI Gateway
-- Structured output with Zod schemas or JSON Schema
-- Template variable substitution
-- Caching and analytics via AI Gateway
+**Dynamic Edge:**
+```json
+{
+  "id": "edge_2",
+  "from": "node_b",
+  "rule": [
+    { "if": "state.score > 50", "then": "return 'high_score_node'" },
+    { "if": "state.score <= 50", "then": "return 'low_score_node'" },
+    { "return": "'default_node'" }
+  ]
+}
+```
 
-**Config:**
+## Built-in Executors
+
+### 1. LLM (`llm`)
+
+Execute LLM calls with structured output support.
+
 ```json
 {
   "model": "@cf/meta/llama-3.1-8b-instruct",
   "provider": "openai-sdk",
   "messages": [
-    {
-      "role": "system",
-      "content": "You are a helpful assistant"
-    },
     {
       "role": "user",
       "content": "Analyze: {{parent.fetch_data.text}}"
@@ -160,18 +242,11 @@ Execute LLM calls with structured output support using OpenAI SDK or Workers AI.
     "type": "object",
     "properties": {
       "sentiment": { "type": "string" },
-      "score": { "type": "number" },
-      "categories": { "type": "array", "items": { "type": "string" } }
-    },
-    "required": ["sentiment", "score"]
+      "score": { "type": "number" }
+    }
   },
-  "gateway": {
-    "id": "my-gateway",
-    "skipCache": false,
-    "cacheTtl": 3600
-  },
-  "max_tokens": 1000,
-  "temperature": 0.7
+  "gateway": { "id": "my-gateway" },
+  "max_tokens": 1000
 }
 ```
 
@@ -179,25 +254,23 @@ Execute LLM calls with structured output support using OpenAI SDK or Workers AI.
 
 Transform data using templates.
 
-**Config:**
 ```json
 {
   "template": {
-    "user_id": "{{parent.fetch_user.data.id}}",
-    "full_name": "{{parent.fetch_user.data.firstName}} {{parent.fetch_user.data.lastName}}",
-    "processed_at": "{{parameters.timestamp}}"
+    "userId": "{{parent.fetch_user.data.id}}",
+    "fullName": "{{parent.fetch_user.data.firstName}} {{parent.fetch_user.data.lastName}}",
+    "attempt": "{{state.attempt}}"
   }
 }
 ```
 
 ### 3. SQL Query (`sql_query`)
 
-Execute SQL queries on D1 database.
+Execute SQL queries on D1.
 
-**Config:**
 ```json
 {
-  "query": "SELECT * FROM customers WHERE id = {{parameters.customer_id}} AND created_at > date('now', '-{{parameters.days_back}} days')"
+  "query": "SELECT * FROM users WHERE id = {{parameters.userId}}"
 }
 ```
 
@@ -205,130 +278,201 @@ Execute SQL queries on D1 database.
 
 Make HTTP requests.
 
-**Config:**
 ```json
 {
-  "url": "https://api.example.com/users/{{parent.get_id.user_id}}",
+  "url": "{{config.apiBaseUrl}}/users/{{parameters.userId}}",
   "method": "POST",
   "headers": {
-    "Authorization": "Bearer {{parameters.api_token}}",
-    "Content-Type": "application/json"
+    "Authorization": "Bearer {{config.apiKey}}"
   },
   "body": {
-    "name": "{{parent.user_data.name}}",
-    "email": "{{parent.user_data.email}}"
+    "name": "{{parent.user_data.name}}"
   }
 }
 ```
 
-## Template Syntax
+### 5. Workflow Executor (`workflow_executor`)
 
-Use `{{path.to.value}}` to reference values from:
+Execute another workflow as a sub-workflow.
 
-- **Parameters**: `{{parameters.customer_id}}`
+```json
+{
+  "workflow_id": "workflow_abc123",
+  "parameters": {
+    "userId": "{{parameters.userId}}",
+    "source": "parent_workflow"
+  }
+}
+```
+
+## Template System
+
+Access data using `{{path}}`:
+
+- **Parameters**: `{{parameters.userId}}`
+- **Config**: `{{config.apiKey}}`
+- **State**: `{{state.counter}}`
 - **Parent Nodes**: `{{parent.node_id.field}}`
-- **Nested Fields**: `{{parent.fetch_data.result.user.email}}`
-- **Array Access**: `{{parent.fetch_users.data[0].name}}`
+- **Nested**: `{{parent.fetch_data.result.user.email}}`
+- **Arrays**: `{{parent.fetch_users.data[0].name}}`
 
-## Creating Custom Node Executors
+## State Management
 
-Convert any workflow into a reusable node executor:
+Update state after node execution:
 
-```bash
-POST /api/node-executors
+```json
 {
-  "type": "sentiment_analyzer",
-  "name": "Sentiment Analyzer",
-  "description": "Analyzes sentiment of text",
-  "config_schema": {
-    "type": "object",
-    "properties": {
-      "parameter_mapping": {
-        "type": "object",
-        "properties": {
-          "feedback_text": { "type": "string" }
-        }
-      }
+  "setState": [
+    {
+      "key": "total",
+      "rule": [
+        { "if": "state.total", "then": "return state.total + output.count" },
+        { "return": "output.count" }
+      ]
+    },
+    {
+      "key": "max_value",
+      "rule": [
+        { "if": "output.value > state.max_value", "then": "return output.value" },
+        { "return": "state.max_value || 0" }
+      ]
     }
-  },
-  "source_workflow_id": "workflow-123"
+  ]
 }
 ```
 
-## Environment Variables
+Rule context includes:
+- `parameters`: Workflow input
+- `config`: Config variables
+- `state`: Current state
+- `parent`: All node outputs
+- `output`: Current node's output
 
-Required in `wrangler.jsonc`:
+## Example: Retry Logic
 
-```jsonc
+```json
 {
-  "ai": {
-    "binding": "AI"  // Workers AI binding
-  },
-  "vars": {
-    "CLOUDFLARE_ACCOUNT_ID": "your-account-id",
-    "AI_GATEWAY_ID": "your-gateway-id"
+  "nodes": [
+    {
+      "id": "api_call",
+      "type": "http_request",
+      "config": { "url": "{{parameters.url}}" },
+      "setState": [
+        {
+          "key": "attempt",
+          "rule": [
+            { "if": "state.attempt", "then": "return state.attempt + 1" },
+            { "return": "1" }
+          ]
+        },
+        {
+          "key": "success",
+          "rule": [
+            { "if": "output.status === 200", "then": "return true" },
+            { "return": "false" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "check_retry",
+      "type": "data_transformer",
+      "config": { "template": { "status": "{{state.success}}" } }
+    },
+    {
+      "id": "success",
+      "type": "data_transformer",
+      "config": { "template": { "result": "{{parent.api_call.data}}" } }
+    }
+  ],
+  "edges": [
+    { "id": "e1", "from": "api_call", "to": "check_retry" },
+    {
+      "id": "e2",
+      "from": "check_retry",
+      "rule": [
+        { "if": "state.success === true", "then": "return 'success'" },
+        { "if": "state.attempt < 3", "then": "return 'api_call'" },
+        { "return": "'success'" }
+      ]
+    }
+  ],
+  "startNode": "api_call",
+  "endNode": "success",
+  "maxIterations": 10
+}
+```
+
+## Config Management
+
+Store environment-specific variables in KV:
+
+```json
+{
+  "name": "Production Config",
+  "description": "Production environment",
+  "variables": {
+    "apiBaseUrl": "https://api.prod.example.com",
+    "apiKey": "prod_key_xxx",
+    "databaseUrl": "postgres://..."
   }
 }
 ```
 
-Required secrets (use `npx wrangler secret put`):
-
-- `CLOUDFLARE_API_TOKEN` - API token with Workers AI access
+Use in workflows: `{{config.apiBaseUrl}}`
 
 ## Project Structure
 
 ```
 src/
 ├── db/
-│   └── schema.ts          # Drizzle schema with indexes
-├── repositories/          # Data access layer
-├── services/              # Business logic
-├── orchestration/         # Workflow execution engine
-├── executors/             # Built-in node executors
+│   └── schema.ts              # Drizzle schema
+├── domain/
+│   └── entities.ts            # Domain models & validation
+├── repositories/              # Data access layer
+├── services/                  # Business logic
+├── orchestration/
+│   ├── workflow-orchestrator.ts   # Graph traversal engine
+│   └── node-executor.factory.ts   # Executor registry
+├── executors/                 # Built-in executors
+│   ├── base-node-executor.ts  # Base class with template parsing
 │   ├── llm.executor.ts
 │   ├── data-transformer.executor.ts
 │   ├── sql.executor.ts
 │   └── request.executor.ts
-├── routes/                # API routes
-├── schemas/               # Zod validation schemas
-├── utils/                 # Template parser & helpers
-└── index.ts              # Main entry point
+├── routes/                    # API routes
+├── schemas/
+│   └── dtos.ts                # API DTOs (extend domain models)
+├── utils/
+│   └── template-parser.ts     # Template resolver
+└── index.ts                   # Entry point
 ```
 
 ## Key Design Decisions
 
-1. **Builtin Executors in Code**: No database seeding needed. Each executor class defines its own schema via `getDefinition()`.
+1. **Graph-Based Execution**: Explicit edges enable cycles, retry logic, and complex workflows
 
-2. **OpenAI SDK for LLM**: Uses OpenAI SDK with AI Gateway for structured output, better type safety, and familiar API.
+2. **State Management**: Rule-based state updates using @elite-libs/rules-machine for declarative logic
 
-3. **No Streaming**: Workflow nodes need complete data for downstream nodes and database storage.
+3. **Template Parsing**: Centralized in BaseNodeExecutor - all executors get automatic template resolution
 
-4. **Template Parser**: Powerful `{{variable}}` syntax for dynamic data access across workflow nodes.
+4. **Config Separation**: Parameters (workflow input) and Config (environment variables) stored separately
 
-5. **Topological Sort**: Automatic dependency resolution and execution ordering.
+5. **Iteration Limits**: Safety mechanism to prevent infinite loops in cyclic workflows
+
+6. **Sub-Workflows**: `workflow_executor` enables composition and reusability
 
 ## Development
 
-### Generate Migrations
-
-After modifying the schema:
-
 ```bash
+# Generate migrations
 npm run db:generate
-```
 
-### Run Tests
-
-```bash
-npm test
-```
-
-### Type Generation
-
-Generate TypeScript types for Wrangler:
-
-```bash
+# Type generation
 npm run cf-typegen
+
+# Tests
+npm test
 ```
 
 ## License

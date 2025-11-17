@@ -3,6 +3,9 @@ import { DataTransformerExecutor } from '../executors/data-transformer.executor'
 import { SQLExecutor } from '../executors/sql.executor';
 import { RequestExecutor } from '../executors/request.executor';
 import { LLMExecutor } from '../executors/llm.executor';
+import { VectorizeExecutor } from '../executors/vectorize.executor';
+import { EmbeddingExecutor } from '../executors/embedding.executor';
+
 
 
 export class NodeExecutorFactory {
@@ -29,5 +32,7 @@ export class NodeExecutorFactory {
     this.executors.set('sql_query', new SQLExecutor(this.env));
     this.executors.set('http_request', new RequestExecutor(this.env));
     this.executors.set('llm', new LLMExecutor(this.env));
+    this.executors.set('vectorize', new VectorizeExecutor(this.env));
+		this.executors.set('embedding', new EmbeddingExecutor(this.env));
   }
 }
