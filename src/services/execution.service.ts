@@ -71,4 +71,31 @@ export class ExecutionService {
       })
     );
   }
+
+  async executeWorkflowStreaming(
+    workflowId: string,
+    parameters: Record<string, any>,
+    configId?: string
+  ): Promise<Response> {
+    const workflow = await this.workflowRepo.findById(workflowId);
+    if (!workflow) {
+      throw new Error('Workflow not found');
+    }
+
+    const resolvedConfigId = configId || workflow.defaultConfigId || null;
+    const configVariables = await this.configService.getConfigVariables(resolvedConfigId);
+
+    const execution = await this.executionRepo.create({
+      workflowId: workflowId,
+      status: 'pending',
+      parameters: parameters,
+      config: configVariables,
+      configId: resolvedConfigId,
+      result: null,
+      error: null,
+      completedAt: null,
+    });
+
+    return await this.orchestrator.executeWithStreaming(workflow, execution) as Response;
+  }
 }

@@ -48,6 +48,7 @@ CREATE TABLE `workflows` (
 	`edges` text NOT NULL,
 	`start_node` text NOT NULL,
 	`end_node` text NOT NULL,
+	`state` text,
 	`max_iterations` integer DEFAULT 100 NOT NULL,
 	`default_config_id` text,
 	`created_at` integer NOT NULL,

@@ -12,10 +12,12 @@ export const NodeSchema = z.object({
       rule: z.array(z.any()),
     })
   ).optional(),
+  streaming: z.object({
+    enabled: z.boolean().optional(),
+    sendOnComplete: z.boolean().optional(),
+  }).optional(),
 });
 
-
-// Edge schemas - discriminated union for static vs dynamic edges
 export const StaticEdgeSchema = z.object({
   id: z.string(),
   from: z.string(),
@@ -33,8 +35,6 @@ export const EdgeSchema = z.discriminatedUnion('type', [
   DynamicEdgeSchema.extend({ type: z.literal('dynamic') }),
 ]);
 
-// For convenience, also allow edges without explicit type field
-// The type will be inferred from presence of 'to' vs 'rule'
 export const EdgeInputSchema = z.union([
   StaticEdgeSchema,
   DynamicEdgeSchema,

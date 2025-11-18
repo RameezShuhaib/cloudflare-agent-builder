@@ -14,4 +14,11 @@ export class NodeExecutionRepository extends BaseRepository<typeof nodeExecution
 			.from(nodeExecutions)
 			.where(eq(nodeExecutions.executionId, executionId)) as unknown as NodeExecutionModel[];
 	}
+
+	async updateStatus(id: string, status: 'pending' | 'running' | 'completed' | 'failed'): Promise<void> {
+		await this.db
+			.update(nodeExecutions)
+			.set({ status })
+			.where(eq(nodeExecutions.id, id));
+	}
 }

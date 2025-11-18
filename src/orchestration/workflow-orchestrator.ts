@@ -341,4 +341,390 @@ export class WorkflowOrchestrator {
       }
     }
   }
+
+  // Streaming execution methods
+  async executeWithStreaming(
+    workflow: WorkflowModel,
+    execution: ExecutionModel,
+    streamingContext?: any
+  ): Promise<Response | any> {
+    const { readable, writable } = new TransformStream();
+    const writer = writable.getWriter();
+    const encoder = new TextEncoder();
+
+    const sendEvent = (event: any) => {
+      if (streamingContext?.onEvent) {
+        streamingContext.onEvent(event);
+      } else {
+        const data = `data: ${JSON.stringify(event)}\n\n`;
+        writer.write(encoder.encode(data));
+      }
+    };
+
+    const context = {
+      executionId: execution.id,
+      depth: streamingContext?.depth || 0,
+      parentExecutionId: streamingContext?.parentExecutionId,
+      path: streamingContext?.path || []
+    };
+
+    this.runStreamingWorkflow(
+      workflow,
+      execution,
+      sendEvent,
+      context,
+      execution.parameters as Record<string, any>,
+      execution.config as Record<string, any> || {}
+    )
+      .catch((error) => {
+        sendEvent({
+          type: 'error',
+          executionId: context.executionId,
+          depth: context.depth,
+          path: context.path,
+          data: { message: error.message },
+          timestamp: new Date().toISOString()
+        });
+      })
+      .finally(() => {
+        if (!streamingContext?.onEvent) {
+          writer.close();
+        }
+      });
+
+    if (!streamingContext?.onEvent) {
+      return new Response(readable, {
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive'
+        }
+      });
+    }
+
+    return await this.waitForCompletion(execution.id);
+  }
+
+  private async runStreamingWorkflow(
+    workflow: WorkflowModel,
+    execution: ExecutionModel,
+    sendEvent: (event: any) => void,
+    context: any,
+    workflowParameters: Record<string, any>,
+    workflowConfig: Record<string, any>
+  ): Promise<void> {
+    try {
+      sendEvent({
+        type: 'workflow_start',
+        workflowId: workflow.id,
+        executionId: context.executionId,
+        depth: context.depth,
+        path: context.path,
+        data: { parameters: workflowParameters },
+        timestamp: new Date().toISOString()
+      });
+
+      await this.executionRepo.updateStatus(execution.id, 'running');
+
+      const finalOutput = await this.executeWorkflowTraversalStreaming(
+        workflow,
+        execution,
+        workflowParameters,
+        workflowConfig,
+        sendEvent,
+        context
+      );
+
+      await this.executionRepo.update(execution.id, {
+        status: 'completed',
+        result: finalOutput,
+        completedAt: new Date(),
+      });
+
+      sendEvent({
+        type: 'workflow_complete',
+        workflowId: workflow.id,
+        executionId: context.executionId,
+        depth: context.depth,
+        path: context.path,
+        data: { result: finalOutput },
+        timestamp: new Date().toISOString()
+      });
+    } catch (error: any) {
+      await this.executionRepo.update(execution.id, {
+        status: 'failed',
+        error: error.message,
+        completedAt: new Date(),
+      });
+      throw error;
+    }
+  }
+
+  private async executeWorkflowTraversalStreaming(
+    workflow: WorkflowModel,
+    execution: ExecutionModel,
+    workflowParameters: Record<string, any>,
+    workflowConfig: Record<string, any>,
+    sendEvent: (event: any) => void,
+    context: any
+  ): Promise<any> {
+    const nodes = workflow.nodes as NodeDTO[];
+    const edges = workflow.edges as Edge[];
+    const nodeMap = new Map<string, NodeDTO>();
+    const nodeOutputs = new Map<string, any>();
+    const state: Record<string, any> = workflow.state || {};
+
+    for (const node of nodes) {
+      nodeMap.set(node.id, node);
+    }
+
+    const edgeMap = new Map<string, Edge>();
+    for (const edge of edges) {
+      edgeMap.set(edge.from, edge);
+    }
+
+    let currentNodeId = workflow.startNode;
+    let iterations = 0;
+    const maxIterations = workflow.maxIterations || 100;
+
+    while (currentNodeId !== workflow.endNode && iterations < maxIterations) {
+      iterations++;
+
+      const currentNode = nodeMap.get(currentNodeId);
+      if (!currentNode) {
+        throw new Error(`Node '${currentNodeId}' not found during execution`);
+      }
+
+      const output = await this.executeNodeStreaming(
+        currentNode,
+        execution,
+        nodeOutputs,
+        workflowParameters,
+        workflowConfig,
+        state,
+        sendEvent,
+        context,
+        workflow
+      );
+
+      nodeOutputs.set(currentNodeId, output);
+
+      if (currentNodeId === workflow.endNode) {
+        break;
+      }
+
+      const edge = edgeMap.get(currentNodeId);
+      if (!edge) {
+        throw new Error(`No outgoing edge found from node '${currentNodeId}'`);
+      }
+
+      if ('to' in edge) {
+        currentNodeId = edge.to;
+      } else {
+        const nextNodeId = await this.evaluateDynamicEdge(
+          edge,
+          nodeOutputs,
+          workflowParameters,
+          workflowConfig,
+          state
+        );
+
+        if (!nodeMap.has(nextNodeId)) {
+          throw new Error(`Dynamic edge '${edge.id}' returned invalid node ID '${nextNodeId}'`);
+        }
+
+        currentNodeId = nextNodeId;
+      }
+    }
+
+    if (iterations >= maxIterations) {
+      throw new Error(`Workflow execution exceeded maximum iterations (${maxIterations})`);
+    }
+
+    if (currentNodeId === workflow.endNode && !nodeOutputs.has(currentNodeId)) {
+      const endNode = nodeMap.get(currentNodeId);
+      if (endNode) {
+        const output = await this.executeNodeStreaming(
+          endNode,
+          execution,
+          nodeOutputs,
+          workflowParameters,
+          workflowConfig,
+          state,
+          sendEvent,
+          context,
+          workflow
+        );
+        nodeOutputs.set(currentNodeId, output);
+      }
+    }
+
+    return nodeOutputs.get(workflow.endNode);
+  }
+
+  private async executeNodeStreaming(
+    node: NodeDTO,
+    execution: ExecutionModel,
+    nodeOutputs: Map<string, any>,
+    workflowParameters: Record<string, any>,
+    workflowConfig: Record<string, any>,
+    state: Record<string, any>,
+    sendEvent: (event: any) => void,
+    context: any,
+    workflow: WorkflowModel
+  ): Promise<any> {
+    const nodePath = [...context.path, node.id];
+    const startTime = Date.now();
+
+    sendEvent({
+      type: 'node_start',
+      nodeId: node.id,
+      nodeType: node.type,
+      depth: context.depth,
+      path: nodePath,
+      timestamp: new Date().toISOString()
+    });
+
+    const nodeExecution = await this.nodeExecRepo.create({
+      executionId: execution.id,
+      nodeId: node.id,
+      status: 'running',
+      output: null,
+      error: null,
+      completedAt: null,
+    });
+
+    try {
+      await this.nodeExecRepo.updateStatus(nodeExecution.id, 'running');
+
+      const input = this.buildNodeInput(
+        nodeOutputs,
+        workflowParameters,
+        workflowConfig,
+        state,
+        context
+      );
+
+      const executor = await this.nodeFactory.getExecutor(node.type);
+      if (!executor) {
+        throw new Error(`No executor found for node type: ${node.type}`);
+      }
+
+      const shouldStream = this.shouldStreamNode(node, executor);
+      let output: any;
+
+      if (shouldStream && executor.executeStreaming) {
+        output = await executor.executeStreaming(node.config, input, (chunk) => {
+          sendEvent({
+            type: 'node_chunk',
+            nodeId: node.id,
+            nodeType: node.type,
+            depth: context.depth,
+            path: nodePath,
+            data: chunk,
+            timestamp: new Date().toISOString()
+          });
+        });
+      } else {
+        output = await executor.run(node.config, input);
+      }
+
+      if (node.setState) {
+        await this.executeSetState(node.setState, input, output, state);
+      }
+
+      await this.nodeExecRepo.update(nodeExecution.id, {
+        status: 'completed',
+        output: output,
+        completedAt: new Date(),
+      });
+
+      const duration = Date.now() - startTime;
+
+      if (node.streaming?.sendOnComplete !== false) {
+        sendEvent({
+          type: 'node_complete',
+          nodeId: node.id,
+          nodeType: node.type,
+          depth: context.depth,
+          path: nodePath,
+          data: output,
+          metadata: { duration },
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      return output;
+    } catch (error: any) {
+      await this.nodeExecRepo.update(nodeExecution.id, {
+        status: 'failed',
+        error: error.message,
+        completedAt: new Date(),
+      });
+
+      sendEvent({
+        type: 'error',
+        nodeId: node.id,
+        nodeType: node.type,
+        depth: context.depth,
+        path: nodePath,
+        data: { message: error.message },
+        timestamp: new Date().toISOString()
+      });
+
+      throw error;
+    }
+  }
+
+  private shouldStreamNode(node: any, executor: any): boolean {
+    if (node.streaming?.enabled === false) {
+			return false
+		} else {
+      if (!executor.supportsStreaming) {
+        throw new Error(`Node ${node.id} configured to stream but executor ${executor.type} doesn't support it`);
+      }
+      return true;
+    }
+  }
+
+  private buildNodeInput(
+    nodeOutputs: Map<string, any>,
+    workflowParameters: Record<string, any>,
+    workflowConfig: Record<string, any>,
+    state: Record<string, any>,
+    context: any
+  ): Record<string, any> {
+    const parentOutputs: Record<string, any> = {};
+    for (const [nodeId, output] of nodeOutputs.entries()) {
+      parentOutputs[nodeId] = output;
+    }
+
+    return {
+      parameters: workflowParameters,
+      config: workflowConfig,
+      parent: parentOutputs,
+      state: state,
+      context: {
+        executionId: context.executionId,
+        depth: context.depth,
+        path: context.path
+      }
+    };
+  }
+
+  private async waitForCompletion(executionId: string): Promise<any> {
+    let attempts = 0;
+    const maxAttempts = 100;
+
+    while (attempts < maxAttempts) {
+      const execution = await this.executionRepo.findById(executionId);
+      if (execution && (execution.status === 'completed' || execution.status === 'failed')) {
+        return execution.result;
+      }
+      await new Promise(resolve => setTimeout(resolve, 100));
+      attempts++;
+    }
+
+    throw new Error('Execution timeout');
+  }
 }

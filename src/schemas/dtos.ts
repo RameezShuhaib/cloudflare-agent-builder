@@ -16,6 +16,7 @@ export type UpdateWorkflowDTO = z.input<typeof UpdateWorkflowDTO>;
 export const ExecuteWorkflowDTO = z.object({
   parameters: z.record(z.string(), z.any()),
   configId: z.string().optional(),
+  stream: z.boolean().optional(),
 });
 export type ExecuteWorkflowDTO = z.input<typeof ExecuteWorkflowDTO>;
 

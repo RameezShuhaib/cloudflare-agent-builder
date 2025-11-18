@@ -73,6 +73,21 @@ export function workflowRoutes() {
       const executionService = c.get('executionService');
       const workflowId = c.req.param('id');
       const dto = c.req.valid('json');
+      
+      // Check if streaming is requested
+      const streamQuery = c.req.query('stream');
+      const streamFromBody = dto.stream;
+      const shouldStream = streamQuery === 'true' || streamFromBody === true;
+      
+      if (shouldStream) {
+        const response = await executionService.executeWorkflowStreaming(
+          workflowId,
+          dto.parameters,
+          dto.configId
+        );
+        return response;
+      }
+      
       const execution = await executionService.executeWorkflow(
         workflowId,
         dto.parameters,

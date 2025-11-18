@@ -1,0 +1,90 @@
+{
+  "name": "Streaming Chat Workflow",
+  "description": "Chat workflow with streaming enabled",
+  "parameterSchema": {
+    "type": "object",
+    "properties": {
+      "userMessage": {
+        "type": "string",
+        "description": "The message from the user"
+      },
+      "systemPrompt": {
+        "type": "string",
+        "description": "Optional system prompt to guide the assistant's behavior"
+      }
+    },
+    "required": ["userMessage"]
+  },
+  "streaming": {
+    "enabled": true
+  },
+  "nodes": [
+    {
+      "id": "chat_response",
+      "type": "llm",
+      "config": {
+        "model": "@cf/meta/llama-3.1-8b-instruct",
+        "provider": "openai-sdk",
+        "messages": [
+          {
+            "role": "system",
+            "content": "{{parameters.systemPrompt}}"
+          },
+          {
+            "role": "user",
+            "content": "{{parameters.userMessage}}"
+          }
+        ],
+        "max_tokens": 500,
+        "temperature": 0.7,
+        "gateway": {
+          "id": "{{config.AI_GATEWAY_ID}}"
+        },
+        "cloudflare": {
+          "accountId": "{{config.CLOUDFLARE_ACCOUNT_ID}}",
+          "apiToken": "{{config.ACCESS_TOKEN}}"
+        }
+      }
+    },
+    {
+      "id": "format_response",
+      "type": "data_transformer",
+      "config": {
+        "template": {
+          "response": "{{parent.chat_response.text}}",
+          "userMessage": "{{parameters.userMessage}}"
+        }
+      },
+      "streaming": {
+        "enabled": false,
+        "sendOnComplete": true
+      }
+    },
+    {
+      "id": "end_node",
+      "type": "data_transformer",
+      "config": {
+        "template": {
+          "finalResponse": "{{parent.format_response.response}}",
+          "userMessage": "{{parent.format_response.userMessage}}"
+        }
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "from": "chat_response",
+      "to": "format_response"
+    },
+    {
+      "id": "e2",
+      "from": "format_response",
+      "to": "end_node"
+    }
+  ],
+  "startNode": "chat_response",
+  "endNode": "end_node",
+  "maxIterations": 10,
+  "defaultConfigId": "dd34611b-ca0d-4556-800d-8d6c4046f9a4"
+}

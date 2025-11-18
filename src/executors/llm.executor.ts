@@ -34,6 +34,7 @@ type LLMConfig = z.infer<typeof llmConfigSchema>;
 export class LLMExecutor extends NodeExecutor {
   readonly type = 'llm';
   readonly description = 'Execute LLM requests with support for multiple providers (Workers AI, OpenAI)';
+  readonly supportsStreaming = true;
 
   private readonly ai?: Ai;
 
@@ -45,6 +46,29 @@ export class LLMExecutor extends NodeExecutor {
 
   getConfigSchema() {
     return llmConfigSchema;
+  }
+
+  async executeStreaming(
+    config: Record<string, any>,
+    input: Record<string, any>,
+    onChunk: (chunk: any) => void
+  ): Promise<any> {
+    const llmConfig = config as LLMConfig;
+
+    if (!llmConfig.model) {
+      throw new Error('LLMExecutor requires a model in config');
+    }
+
+    const parsedMessages = this.buildMessages(llmConfig, input);
+    const provider = llmConfig.provider || 'openai-sdk';
+
+    if (provider === 'openai-sdk') {
+      return await this.executeWithOpenAIStreaming(llmConfig, parsedMessages, onChunk);
+    } else if (provider === 'workers-ai' && this.ai) {
+      return await this.executeWithWorkersAIStreaming(llmConfig, parsedMessages, onChunk);
+    } else {
+      throw new Error('Invalid provider or Workers AI binding not available');
+    }
   }
 
   async execute(config: Record<string, any>, input: Record<string, any>): Promise<any> {
@@ -189,7 +213,125 @@ export class LLMExecutor extends NodeExecutor {
     return await this.ai.run(config.model as any, payload, gatewayOptions);
   }
 
-  private isZodSchema(value: any): boolean {
-    return value && typeof value === 'object' && '_def' in value;
+  private async executeWithOpenAIStreaming(
+    config: LLMConfig,
+    messages: Array<{ role: string; content: string }>,
+    onChunk: (chunk: any) => void
+  ): Promise<any> {
+    if (!config.cloudflare.accountId || !config.cloudflare.apiToken) {
+      throw new Error('OpenAI SDK requires accountId and apiToken');
+    }
+
+    const gatewayId = config.gateway?.id;
+    if (!gatewayId) {
+      throw new Error('Gateway ID is required for OpenAI SDK mode');
+    }
+
+    const client = new OpenAI({
+      apiKey: config.cloudflare.apiToken,
+      baseURL: `https://gateway.ai.cloudflare.com/v1/${config.cloudflare.accountId}/${gatewayId}/compat`,
+    });
+
+    const modelName = config.model.startsWith('workers-ai/')
+      ? config.model
+      : `workers-ai/${config.model}`;
+
+    const stream = await client.chat.completions.create({
+      model: modelName,
+      messages: messages as any,
+      max_tokens: config.max_tokens || 1000,
+      temperature: config.temperature,
+      stream: true,
+    });
+
+    let fullText = '';
+    let usage: any = null;
+
+    for await (const chunk of stream) {
+      const delta = chunk.choices[0]?.delta;
+      if (delta?.content) {
+        fullText += delta.content;
+        onChunk({ chunk: delta.content });
+      }
+      // Capture usage from the last chunk if available
+      if (chunk.usage) {
+        usage = chunk.usage;
+      }
+    }
+
+    return {
+      text: fullText,
+      usage: usage,
+      model: modelName,
+      finish_reason: 'stop',
+    };
+  }
+
+  private async executeWithWorkersAIStreaming(
+    config: LLMConfig,
+    messages: Array<{ role: string; content: string }>,
+    onChunk: (chunk: any) => void
+  ): Promise<any> {
+    if (!this.ai) {
+      throw new Error('Workers AI binding not available');
+    }
+
+    const payload: any = {
+      messages: messages,
+      max_tokens: config.max_tokens || 1000,
+      temperature: config.temperature,
+      stream: true,
+    };
+
+    const gatewayOptions = config.gateway
+      ? {
+          gateway: {
+            id: config.gateway.id,
+            skipCache: config.gateway.skipCache,
+            cacheTtl: config.gateway.cacheTtl,
+          },
+        }
+      : undefined;
+
+    const stream = await this.ai.run(config.model as any, payload, gatewayOptions) as ReadableStream;
+
+    let fullText = '';
+    const reader = stream.getReader();
+    const decoder = new TextDecoder();
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split('\n');
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6);
+            if (data === '[DONE]') continue;
+
+            try {
+              const parsed = JSON.parse(data);
+              if (parsed.response) {
+                fullText += parsed.response;
+                onChunk({ chunk: parsed.response });
+              }
+            } catch (e) {
+              // Skip invalid JSON
+            }
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+
+    return {
+      text: fullText,
+      model: config.model,
+      finish_reason: 'stop',
+    };
   }
 }
