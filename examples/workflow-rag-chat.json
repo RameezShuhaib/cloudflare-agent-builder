@@ -1,0 +1,120 @@
+{
+  "name": "RAG Chat with Vector Store",
+  "description": "Chat workflow that retrieves relevant context from vector store before responding",
+  "parameterSchema": {
+    "type": "object",
+    "properties": {
+      "userMessage": {
+        "type": "string",
+        "description": "The user's question"
+      },
+      "systemPrompt": {
+        "type": "string",
+        "description": "Optional system prompt"
+      },
+      "topK": {
+        "type": "number",
+        "description": "Number of similar documents to retrieve",
+        "default": 3
+      }
+    },
+    "required": ["userMessage"]
+  },
+  "nodes": [
+    {
+      "id": "generate_query_embedding",
+      "type": "embedding",
+      "config": {
+        "text": "{{parameters.userMessage}}",
+        "model": "@cf/baai/bge-base-en-v1.5"
+      }
+    },
+    {
+      "id": "search_vector_store",
+      "type": "vectorize",
+      "config": {
+        "operation": "query",
+        "indexBinding": "DEFAULT_VECTORIZE_INDEX",
+        "queryVector": "{{parent.generate_query_embedding.embedding}}",
+        "topK": 3,
+        "returnValues": false,
+        "returnMetadata": "all"
+      }
+    },
+    {
+      "id": "format_context",
+      "type": "data_transformer",
+      "config": {
+        "template": {
+          "context": "{{parent.search_vector_store.matches}}",
+          "userMessage": "{{parameters.userMessage}}"
+        }
+      }
+    },
+    {
+      "id": "chat_with_context",
+      "type": "llm",
+      "config": {
+        "model": "@cf/meta/llama-3.1-8b-instruct",
+        "provider": "openai-sdk",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are a helpful assistant. Use the following context to answer the user's question. If the context doesn't contain relevant information, say so.\n\nContext: {{parent.search_vector_store.matches}}"
+          },
+          {
+            "role": "user",
+            "content": "{{parameters.userMessage}}"
+          }
+        ],
+        "max_tokens": 500,
+        "temperature": 0.7,
+        "gateway": {
+          "id": "{{config.AI_GATEWAY_ID}}"
+        },
+        "cloudflare": {
+          "accountId": "{{config.CLOUDFLARE_ACCOUNT_ID}}",
+          "apiToken": "{{config.ACCESS_TOKEN}}"
+        }
+      }
+    },
+    {
+      "id": "end_node",
+      "type": "data_transformer",
+      "config": {
+        "template": {
+          "response": "{{parent.chat_with_context.text}}",
+          "userMessage": "{{parameters.userMessage}}",
+          "retrievedDocuments": "{{parent.search_vector_store.matches}}",
+          "documentsCount": "{{parent.search_vector_store.count}}"
+        }
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "from": "generate_query_embedding",
+      "to": "search_vector_store"
+    },
+    {
+      "id": "e2",
+      "from": "search_vector_store",
+      "to": "format_context"
+    },
+    {
+      "id": "e3",
+      "from": "format_context",
+      "to": "chat_with_context"
+    },
+    {
+      "id": "e4",
+      "from": "chat_with_context",
+      "to": "end_node"
+    }
+  ],
+  "startNode": "generate_query_embedding",
+  "endNode": "end_node",
+  "maxIterations": 10,
+  "defaultConfigId": "dd34611b-ca0d-4556-800d-8d6c4046f9a4"
+}

@@ -3,11 +3,16 @@ import { zValidator } from '@hono/zod-validator';
 import { ExecutionService } from '../services/execution.service';
 import { ExecuteWorkflowDTO } from '../schemas/dtos';
 
-export function executionRoutes(executionService: ExecutionService) {
-  const app = new Hono();
+type Variables = {
+  executionService: ExecutionService;
+};
+
+export function executionRoutes() {
+  const app = new Hono<{ Variables: Variables }>();
 
   app.post('/:id/execute', zValidator('json', ExecuteWorkflowDTO), async (c) => {
     try {
+      const executionService = c.get('executionService');
       const workflowId = c.req.param('id');
       const dto = c.req.valid('json');
       const execution = await executionService.executeWorkflow(
@@ -23,6 +28,7 @@ export function executionRoutes(executionService: ExecutionService) {
 
   app.get('/:id', async (c) => {
     try {
+      const executionService = c.get('executionService');
       const id = c.req.param('id');
       const execution = await executionService.getExecution(id);
       return c.json(execution);
@@ -33,6 +39,7 @@ export function executionRoutes(executionService: ExecutionService) {
 
   app.get('/:id/executions', async (c) => {
     try {
+      const executionService = c.get('executionService');
       const workflowId = c.req.param('id');
       const executions = await executionService.listExecutionsByWorkflow(workflowId);
       return c.json(executions);

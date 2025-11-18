@@ -129,11 +129,11 @@ npm run deploy
 - `GET /api/workflows/:id` - Get workflow
 - `PUT /api/workflows/:id` - Update workflow
 - `DELETE /api/workflows/:id` - Delete workflow
+- `POST /api/workflows/:id/execute` - Execute workflow
+- `GET /api/workflows/:id/executions` - List all executions for a workflow with node results
 
 ### Executions
-- `POST /api/workflows/:id/execute` - Execute workflow
-- `GET /api/executions/:id` - Get execution
-- `GET /api/workflows/:id/executions` - List executions with node results
+- `GET /api/executions/:id` - Get single execution details
 
 ### Configs
 - `POST /api/configs` - Create config
@@ -142,6 +142,9 @@ npm run deploy
 - `PATCH /api/configs/:id` - Partial update
 - `PUT /api/configs/:id` - Full replace
 - `DELETE /api/configs/:id` - Delete config
+- `GET /api/configs/:id/variables/:key` - Get specific config variable
+- `PUT /api/configs/:id/variables/:key` - Update specific config variable
+- `DELETE /api/configs/:id/variables/:key` - Delete specific config variable
 
 ## Workflow Structure
 
@@ -492,6 +495,164 @@ Rule context includes:
   "endNode": "success",
   "maxIterations": 10
 }
+```
+
+## Quick Start: Simple Chat Workflow
+
+Here's a complete example of creating and executing a chat workflow:
+
+### 1. Create a Config with AI Gateway Credentials
+
+```bash
+curl -X POST http://localhost:8787/api/configs \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "AI Config",
+    "description": "Configuration with AI Gateway credentials",
+    "variables": {
+      "CLOUDFLARE_ACCOUNT_ID": "your-account-id",
+      "AI_GATEWAY_ID": "your-gateway-id",
+      "ACCESS_TOKEN": "your-api-token"
+    }
+  }'
+```
+
+### 2. Create a Chat Workflow
+
+```bash
+curl -X POST http://localhost:8787/api/workflows \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Simple Chat Workflow",
+    "description": "A basic chat workflow using LLM",
+    "parameterSchema": {
+      "type": "object",
+      "properties": {
+        "userMessage": {
+          "type": "string",
+          "description": "The message from the user"
+        },
+        "systemPrompt": {
+          "type": "string",
+          "description": "Optional system prompt"
+        }
+      },
+      "required": ["userMessage"]
+    },
+    "nodes": [
+      {
+        "id": "chat_response",
+        "type": "llm",
+        "config": {
+          "model": "@cf/meta/llama-3.1-8b-instruct",
+          "provider": "openai-sdk",
+          "messages": [
+            {
+              "role": "system",
+              "content": "{{parameters.systemPrompt}}"
+            },
+            {
+              "role": "user",
+              "content": "{{parameters.userMessage}}"
+            }
+          ],
+          "max_tokens": 500,
+          "temperature": 0.7,
+          "gateway": {
+            "id": "{{config.AI_GATEWAY_ID}}"
+          },
+          "cloudflare": {
+            "accountId": "{{config.CLOUDFLARE_ACCOUNT_ID}}",
+            "apiToken": "{{config.ACCESS_TOKEN}}"
+          }
+        }
+      },
+      {
+        "id": "format_response",
+        "type": "data_transformer",
+        "config": {
+          "template": {
+            "response": "{{parent.chat_response.text}}",
+            "userMessage": "{{parameters.userMessage}}"
+          }
+        }
+      },
+      {
+        "id": "end_node",
+        "type": "data_transformer",
+        "config": {
+          "template": {
+            "finalResponse": "{{parent.format_response.response}}",
+            "userMessage": "{{parent.format_response.userMessage}}"
+          }
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e1",
+        "from": "chat_response",
+        "to": "format_response"
+      },
+      {
+        "id": "e2",
+        "from": "format_response",
+        "to": "end_node"
+      }
+    ],
+    "startNode": "chat_response",
+    "endNode": "end_node",
+    "maxIterations": 10,
+    "defaultConfigId": "<your-config-id>"
+  }'
+```
+
+### 3. Execute the Workflow
+
+```bash
+curl -X POST http://localhost:8787/api/workflows/<workflow-id>/execute \
+  -H "Content-Type: application/json" \
+  -d '{
+    "parameters": {
+      "userMessage": "What is the capital of France?",
+      "systemPrompt": "You are a helpful geography assistant."
+    }
+  }'
+```
+
+### 4. View Execution Results with Node Details
+
+```bash
+curl -X GET http://localhost:8787/api/workflows/<workflow-id>/executions
+```
+
+This will return all executions with detailed node results, including the LLM response:
+
+```json
+[
+  {
+    "id": "execution-id",
+    "status": "completed",
+    "result": {
+      "finalResponse": "The capital of France is Paris.",
+      "userMessage": "What is the capital of France?"
+    },
+    "node_results": [
+      {
+        "nodeId": "chat_response",
+        "status": "completed",
+        "output": {
+          "text": "The capital of France is Paris.",
+          "usage": {
+            "prompt_tokens": 50,
+            "completion_tokens": 10,
+            "total_tokens": 60
+          }
+        }
+      }
+    ]
+  }
+]
 ```
 
 ## Config Management

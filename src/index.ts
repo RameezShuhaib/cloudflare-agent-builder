@@ -67,10 +67,22 @@ app.use('*', async (c, next) => {
   await next();
 });
 
-// Mount routes
-app.route('/api/workflows', workflowRoutes(app.get('workflowService') as any));
-app.route('/api/executions', executionRoutes(app.get('executionService') as any));
-app.route('/api/configs', configRoutes(app.get('configService') as any));
+// Mount routes - pass services via context
+const workflowRouter = new Hono<{ Bindings: Env; Variables: Variables }>();
+workflowRouter.use('*', (c, next) => next());
+workflowRouter.route('/', workflowRoutes());
+
+const executionRouter = new Hono<{ Bindings: Env; Variables: Variables }>();
+executionRouter.use('*', (c, next) => next());
+executionRouter.route('/', executionRoutes());
+
+const configRouter = new Hono<{ Bindings: Env; Variables: Variables }>();
+configRouter.use('*', (c, next) => next());
+configRouter.route('/', configRoutes());
+
+app.route('/api/workflows', workflowRouter);
+app.route('/api/executions', executionRouter);
+app.route('/api/configs', configRouter);
 
 // 404 handler
 app.notFound((c) => {

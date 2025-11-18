@@ -1,0 +1,83 @@
+{
+  "name": "Add Document to Vector Store",
+  "description": "Takes text content, generates embeddings, and stores in Vectorize",
+  "parameterSchema": {
+    "type": "object",
+    "properties": {
+      "documentId": {
+        "type": "string",
+        "description": "Unique ID for the document"
+      },
+      "content": {
+        "type": "string",
+        "description": "The text content to store"
+      },
+      "title": {
+        "type": "string",
+        "description": "Document title"
+      },
+      "category": {
+        "type": "string",
+        "description": "Document category"
+      }
+    },
+    "required": ["documentId", "content", "title"]
+  },
+  "nodes": [
+    {
+      "id": "generate_embedding",
+      "type": "embedding",
+      "config": {
+        "text": "{{parameters.content}}",
+        "model": "@cf/baai/bge-base-en-v1.5"
+      }
+    },
+    {
+      "id": "store_in_vectorize",
+      "type": "vectorize",
+      "config": {
+        "operation": "insert",
+        "indexBinding": "DEFAULT_VECTORIZE_INDEX",
+        "vectors": [
+          {
+            "id": "{{parameters.documentId}}",
+            "values": "{{parent.generate_embedding.embedding}}",
+            "metadata": {
+              "title": "{{parameters.title}}",
+              "content": "{{parameters.content}}",
+              "category": "{{parameters.category}}"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "end_node",
+      "type": "data_transformer",
+      "config": {
+        "template": {
+          "success": true,
+          "documentId": "{{parameters.documentId}}",
+          "title": "{{parameters.title}}",
+          "vectorStoreResult": "{{parent.store_in_vectorize}}"
+        }
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "from": "generate_embedding",
+      "to": "store_in_vectorize"
+    },
+    {
+      "id": "e2",
+      "from": "store_in_vectorize",
+      "to": "end_node"
+    }
+  ],
+  "startNode": "generate_embedding",
+  "endNode": "end_node",
+  "maxIterations": 10,
+  "defaultConfigId": "dd34611b-ca0d-4556-800d-8d6c4046f9a4"
+}
