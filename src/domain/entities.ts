@@ -17,6 +17,7 @@ export const NodeSchema = z.object({
     sendOnComplete: z.boolean().optional(),
   }).optional(),
 });
+export type NodeModel = z.infer<typeof NodeSchema>;
 
 export const StaticEdgeSchema = z.object({
   id: z.string(),
@@ -90,20 +91,6 @@ export const NodeExecutionSchema = withTimestamps(
 	})
 ).omit({ updatedAt: true });
 export type NodeExecutionModel = z.infer<typeof NodeExecutionSchema>
-
-
-export const NodeExecutorSchema = withTimestamps(
-  z.object({
-		id: z.string(),
-    type: z.string(),
-    name: z.string(),
-    description: toOptional(z.string()),
-    category: z.enum(['builtin', 'custom']),
-    isBuiltin: z.boolean(),
-    sourceWorkflowId: toOptional(z.string()),
-  })
-);
-export type NodeExecutorModel = z.infer<typeof NodeExecutorSchema>
 
 
 export const ConfigSchema = withTimestamps(

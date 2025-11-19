@@ -267,71 +267,112 @@ export class LLMExecutor extends NodeExecutor {
     };
   }
 
-  private async executeWithWorkersAIStreaming(
-    config: LLMConfig,
-    messages: Array<{ role: string; content: string }>,
-    onChunk: (chunk: any) => void
-  ): Promise<any> {
-    if (!this.ai) {
-      throw new Error('Workers AI binding not available');
-    }
+	private async executeWithWorkersAIStreaming(
+		config: LLMConfig,
+		messages: Array<{ role: string; content: string }>,
+		onChunk: (chunk: any) => void
+	): Promise<any> {
+		if (!this.ai) {
+			throw new Error('Workers AI binding not available');
+		}
 
-    const payload: any = {
-      messages: messages,
-      max_tokens: config.max_tokens || 1000,
-      temperature: config.temperature,
-      stream: true,
-    };
+		const payload: any = {
+			messages: messages,
+			max_tokens: config.max_tokens || 1000,
+			temperature: config.temperature,
+			stream: true,
+		};
 
-    const gatewayOptions = config.gateway
-      ? {
-          gateway: {
-            id: config.gateway.id,
-            skipCache: config.gateway.skipCache,
-            cacheTtl: config.gateway.cacheTtl,
-          },
-        }
-      : undefined;
+		const gatewayOptions = config.gateway
+			? {
+				gateway: {
+					id: config.gateway.id,
+					skipCache: config.gateway.skipCache,
+					cacheTtl: config.gateway.cacheTtl,
+				},
+			}
+			: undefined;
 
-    const stream = await this.ai.run(config.model as any, payload, gatewayOptions) as ReadableStream;
+		const stream = await this.ai.run(config.model as any, payload, gatewayOptions) as ReadableStream;
 
-    let fullText = '';
-    const reader = stream.getReader();
-    const decoder = new TextDecoder();
+		let fullText = '';
+		const reader = stream.getReader();
+		const decoder = new TextDecoder();
+		let buffer = '';
 
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+		try {
+			while (true) {
+				const { done, value } = await reader.read();
+				if (done) break;
 
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split('\n');
+				const chunk = decoder.decode(value, { stream: true });
+				buffer += chunk;
 
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6);
-            if (data === '[DONE]') continue;
+				const lines = buffer.split('\n');
 
-            try {
-              const parsed = JSON.parse(data);
-              if (parsed.response) {
-                fullText += parsed.response;
-                onChunk({ chunk: parsed.response });
-              }
-            } catch (e) {
-              // Skip invalid JSON
-            }
-          }
-        }
-      }
-    } finally {
-      reader.releaseLock();
-    }
+				buffer = lines.pop() || '';
 
-    return {
-      text: fullText,
-      model: config.model,
-      finish_reason: 'stop',
-    };
-  }
+				for (const line of lines) {
+					const trimmedLine = line.trim();
+
+					if (!trimmedLine) continue;
+
+					if (trimmedLine.startsWith('data: ')) {
+						const dataStr = trimmedLine.slice(6);
+
+						if (dataStr === '[DONE]') continue;
+
+						try {
+							const parsed = JSON.parse(dataStr);
+							if (parsed.response !== undefined && parsed.response !== null && parsed.response !== '') {
+								fullText += parsed.response;
+								onChunk({ chunk: parsed.response });
+							}
+
+							if (parsed.usage) {
+								console.log('Usage data:', parsed.usage);
+							}
+						} catch (e) {
+							console.error('Failed to parse SSE data:', dataStr, e);
+						}
+					} else if (trimmedLine.startsWith(':')) {
+					} else {
+						try {
+							const parsed = JSON.parse(trimmedLine);
+							if (parsed.response !== undefined && parsed.response !== null && parsed.response !== '') {
+								fullText += parsed.response;
+								onChunk({ chunk: parsed.response });
+							}
+						} catch (e) {
+						}
+					}
+				}
+			}
+
+			if (buffer.trim()) {
+				if (buffer.trim().startsWith('data: ')) {
+					const dataStr = buffer.trim().slice(6);
+					if (dataStr !== '[DONE]') {
+						try {
+							const parsed = JSON.parse(dataStr);
+							if (parsed.response !== undefined && parsed.response !== null && parsed.response !== '') {
+								fullText += parsed.response;
+								onChunk({ chunk: parsed.response });
+							}
+						} catch (e) {
+							console.error('Failed to parse final buffer:', buffer);
+						}
+					}
+				}
+			}
+		} finally {
+			reader.releaseLock();
+		}
+
+		return {
+			text: fullText,
+			model: config.model,
+			finish_reason: 'stop',
+		};
+	}
 }

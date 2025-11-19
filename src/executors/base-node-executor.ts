@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { TemplateParser } from '../utils/template-parser';
-import { StreamEvent } from '../domain/streaming';
+import { NodeModel } from '../domain/entities';
 
 export abstract class NodeExecutor {
 	protected readonly parser = new TemplateParser();
@@ -12,6 +12,8 @@ export abstract class NodeExecutor {
 
 	protected constructor(protected env: Env, protected builtin: boolean = true) {}
 
+	abstract getConfigSchema(): z.ZodObject<any>;
+
 	abstract execute(config: Record<string, any>, input: Record<string, any>): Promise<any>;
 
 	async executeStreaming?(
@@ -22,15 +24,16 @@ export abstract class NodeExecutor {
 		throw new Error(`${this.type} executor doesn't support streaming`);
 	}
 
-	abstract getConfigSchema(): z.ZodObject<any>;
+	async run(node: NodeModel, input: Record<string, any>, onChunk?: (chunk: any) => void): Promise<any> {
+		const parsedConfig = this.parser.parse(node.config, input) as Record<string, any>;
 
-	protected parseConfig(config: Record<string, any>, input: Record<string, any>): Record<string, any> {
-		return this.parser.parse(config, input) as Record<string, any>;
-	}
-
-	async run(config: Record<string, any>, input: Record<string, any>): Promise<any> {
-		const parsedConfig = this.parseConfig(config, input);
-
-		return await this.execute(parsedConfig, input);
+		if (node.streaming?.enabled === true) {
+			if (!this.supportsStreaming || !this.executeStreaming) {
+				throw new Error(`Node ${node.id} configured to stream but executor ${this.type} doesn't support it`);
+			}
+			return await this.executeStreaming(parsedConfig, input, onChunk!);
+		} else {
+			return await this.execute(parsedConfig, input);
+		}
 	}
 }
