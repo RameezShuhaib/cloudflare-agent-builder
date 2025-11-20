@@ -2,11 +2,18 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { WorkflowService } from '../services/workflow.service';
 import { ExecutionService } from '../services/execution.service';
-import { CreateWorkflowDTO, UpdateWorkflowDTO, ExecuteWorkflowDTO } from '../schemas/dtos';
+import {
+	CreateWorkflowDTO,
+	UpdateWorkflowDTO,
+	ExecuteWorkflowDTO,
+	ExecuteStatelessWorkflowDTO,
+} from '../schemas/dtos';
 
 type Variables = {
   workflowService: WorkflowService;
-  executionService: ExecutionService;
+	workflowStatelessService: WorkflowService;
+	executionService: ExecutionService;
+	executionStatelessService: ExecutionService;
 };
 
 export function workflowRoutes() {
@@ -67,39 +74,58 @@ export function workflowRoutes() {
     }
   });
 
-  // Execute workflow
+	app.post('/dry-run', zValidator('json', ExecuteStatelessWorkflowDTO), async (c) => {
+		try {
+			const {workflow, request} = c.req.valid('json');
+
+			const executionService = c.get('executionStatelessService');
+			const workflowService = c.get('workflowStatelessService')
+			const {id: workflowId} = await workflowService.createWorkflow(workflow)
+
+			const execution = await executionService.executeWorkflow(
+				workflowId,
+				request.parameters,
+				request.configId,
+				true,
+			);
+
+			if (execution instanceof Response) {
+				return execution;
+			}
+			return c.json(execution, 201);
+
+		} catch (error: any) {
+			return c.json({ error: error.message }, 400);
+		}
+	});
+
   app.post('/:id/execute', zValidator('json', ExecuteWorkflowDTO), async (c) => {
     try {
       const executionService = c.get('executionService');
       const workflowId = c.req.param('id');
       const dto = c.req.valid('json');
-      
-      // Check if streaming is requested
+
       const streamQuery = c.req.query('stream');
       const streamFromBody = dto.stream;
       const shouldStream = streamQuery === 'true' || streamFromBody === true;
-      
-      if (shouldStream) {
-        const response = await executionService.executeWorkflowStreaming(
-          workflowId,
-          dto.parameters,
-          dto.configId
-        );
-        return response;
-      }
-      
-      const execution = await executionService.executeWorkflow(
-        workflowId,
-        dto.parameters,
-        dto.configId
-      );
+
+			const execution = await executionService.executeWorkflow(
+				workflowId,
+				dto.parameters,
+				dto.configId,
+				shouldStream,
+			);
+
+      if (execution instanceof Response) {
+				return execution;
+			}
       return c.json(execution, 201);
+
     } catch (error: any) {
       return c.json({ error: error.message }, 400);
     }
   });
 
-  // List executions for a workflow
   app.get('/:id/executions', async (c) => {
     try {
       const executionService = c.get('executionService');
@@ -110,6 +136,24 @@ export function workflowRoutes() {
       return c.json({ error: error.message }, 500);
     }
   });
+
+	app.get('/:id/executions/:execution_id', async (c) => {
+		try {
+			const executionService = c.get('executionService');
+
+			const workflowId = c.req.param('id');
+			const execution_id = c.req.param('execution_id');
+
+			const executions = await executionService.getExecution(execution_id);
+			if (executions.workflowId !== workflowId) {
+				return c.json({ error: "Not Found" }, 404);
+			}
+
+			return c.json(executions);
+		} catch (error: any) {
+			return c.json({ error: error.message }, 500);
+		}
+	});
 
   return app;
 }

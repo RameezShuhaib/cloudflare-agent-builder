@@ -143,7 +143,7 @@ export class LLMExecutor extends NodeExecutor {
     });
 
     return {
-      text: completion.choices[0].message.content,
+      result: completion.choices[0].message.content,
       usage: completion.usage,
       model: completion.model,
       finish_reason: completion.choices[0].finish_reason,
@@ -171,7 +171,10 @@ export class LLMExecutor extends NodeExecutor {
 
 		const content = completion.choices[0].message.content;
 		try {
-			return JSON.parse(content || '{}');
+			return {
+				result: JSON.parse(content || '{}'),
+				model: config.model,
+			};
 		} catch (error) {
 			throw new Error(`Failed to parse JSON response: ${error}`);
 		}
@@ -210,7 +213,21 @@ export class LLMExecutor extends NodeExecutor {
         }
       : undefined;
 
-    return await this.ai.run(config.model as any, payload, gatewayOptions);
+    const result = await this.ai.run(config.model as any, payload, gatewayOptions);
+		console.log(result)
+		if (config.response_format) {
+			return {
+				result: JSON.parse(result.response || '{}'),
+				usage: result.usage,
+				model: config.model,
+			};
+		} else {
+			return {
+				result: result.response,
+				usage: result.usage,
+				model: config.model,
+			};
+		}
   }
 
   private async executeWithOpenAIStreaming(
@@ -260,7 +277,7 @@ export class LLMExecutor extends NodeExecutor {
     }
 
     return {
-      text: fullText,
+      result: fullText,
       usage: usage,
       model: modelName,
       finish_reason: 'stop',
@@ -299,7 +316,7 @@ export class LLMExecutor extends NodeExecutor {
 		const reader = stream.getReader();
 		const decoder = new TextDecoder();
 		let buffer = '';
-
+		let usage = undefined
 		try {
 			while (true) {
 				const { done, value } = await reader.read();
@@ -331,6 +348,7 @@ export class LLMExecutor extends NodeExecutor {
 
 							if (parsed.usage) {
 								console.log('Usage data:', parsed.usage);
+								usage = parsed.usage
 							}
 						} catch (e) {
 							console.error('Failed to parse SSE data:', dataStr, e);
@@ -370,7 +388,8 @@ export class LLMExecutor extends NodeExecutor {
 		}
 
 		return {
-			text: fullText,
+			result: fullText,
+			usage,
 			model: config.model,
 			finish_reason: 'stop',
 		};

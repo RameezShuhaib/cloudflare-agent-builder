@@ -20,6 +20,16 @@ export const ExecuteWorkflowDTO = z.object({
 });
 export type ExecuteWorkflowDTO = z.input<typeof ExecuteWorkflowDTO>;
 
+export const ExecuteStatelessWorkflowDTO = z.object({
+	workflow: CreateWorkflowDTO,
+	request: z.object({
+		parameters: z.record(z.string(), z.any()),
+		configId: z.string().optional(),
+		stream: z.boolean().optional(),
+	})
+});
+export type ExecuteStatelessWorkflowDTO = z.input<typeof ExecuteStatelessWorkflowDTO>;
+
 
 export const CreateConfigDTO = ConfigSchema
   .omit({ id: true, createdAt: true, updatedAt: true })
