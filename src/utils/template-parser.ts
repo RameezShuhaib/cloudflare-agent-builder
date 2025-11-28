@@ -33,6 +33,14 @@ export class TemplateParser {
 			return result;
 		};
 
+		parser.functions.parse = (template: Record<string, any>) => {
+			return this.parse(template, context)
+		};
+
+		parser.functions.eval = (expr: string) => {
+			return this.eval(expr, context)
+		};
+
 		const expr = parser.parse(expression);
 		return expr.evaluate(context);
 	}

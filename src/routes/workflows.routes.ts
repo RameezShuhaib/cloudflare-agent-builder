@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { z } from 'zod'
 import { zValidator } from '@hono/zod-validator';
 import { WorkflowService } from '../services/workflow.service';
 import { ExecutionService } from '../services/execution.service';
@@ -125,6 +126,31 @@ export function workflowRoutes() {
       return c.json({ error: error.message }, 400);
     }
   });
+
+	app.post('/:id/execute-raw', zValidator('json', z.record(z.string(), z.any())), async (c) => {
+		try {
+			const executionService = c.get('executionService');
+			const workflowId = c.req.param('id');
+			const parameters = c.req.valid('json');
+
+			const shouldStream = false;
+
+			const execution = await executionService.executeWorkflow(
+				workflowId,
+				parameters,
+				undefined,
+				shouldStream,
+			);
+
+			if (execution instanceof Response) {
+				return execution;
+			}
+			return c.json(execution, 201);
+
+		} catch (error: any) {
+			return c.json({ error: error.message }, 400);
+		}
+	});
 
   app.get('/:id/executions', async (c) => {
     try {
