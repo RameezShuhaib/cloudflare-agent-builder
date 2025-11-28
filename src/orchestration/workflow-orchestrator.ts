@@ -3,7 +3,6 @@ import { ExecutionRepository } from '../repositories/execution.repository';
 import { NodeExecutorFactory } from './node-executor.factory';
 import type { ExecutionModel, WorkflowModel, NodeModel, DynamicEdge, Edge } from '../domain/entities';
 import { TemplateParser } from '../utils/template-parser';
-import { ruleFactory } from '@elite-libs/rules-machine';
 import { WorkflowService } from '../services/workflow.service';
 
 interface StreamingContext {
@@ -462,7 +461,6 @@ export class WorkflowOrchestrator {
 		});
 
 		try {
-			// If we're in streaming mode, execute the sub-workflow with streaming
 			if (streaming) {
 				const subContext: StreamingContext = {
 					executionId: subExecution.id,
@@ -499,46 +497,45 @@ export class WorkflowOrchestrator {
 				parent[nodeId] = output;
 			}
 
-			const ruleContext = {
+			const context = {
 				parameters: workflowParameters,
 				config: workflowConfig,
 				state: state,
 				parent: parent,
 			};
 
-			const ruleFunction = ruleFactory(edge.rule);
-			const result = ruleFunction(ruleContext);
+			const condition = edge.conditions.find(
+				({node: _, condition}) => !!this.parser.eval(condition, context)
+			)
 
-			if (typeof result !== 'string') {
+			if (!condition) {
 				throw new Error(
-					`Dynamic edge rule must return a string (node ID), but got: ${typeof result}`
+					`Not even a single condition passed in Dynamic edge`
 				);
 			}
 
-			return result;
+			return condition.node;
 		} catch (error: any) {
 			throw new Error(`Failed to evaluate dynamic edge '${edge.id}': ${error.message}`);
 		}
 	}
 
 	private async executeSetState(
-		setStateRules: Array<{ key: string; rule: any[] }>,
+		setStateRules: Array<{ key: string; template?: any }>,
 		input: Record<string, any>,
 		output: any,
 		state: Record<string, any>
 	): Promise<void> {
-		for (const { key, rule } of setStateRules) {
+		for (const { key, template } of setStateRules) {
 			try {
-				const ruleContext = {
+				const context = {
 					parameters: input.parameters,
 					config: input.config,
 					parent: input.parent,
 					state,
 					output: output,
 				};
-
-				const ruleFunction = ruleFactory(rule);
-				state[key] = ruleFunction(ruleContext);
+				state[key] = this.parser.parse(template, context)
 			} catch (error: any) {
 				throw new Error(`Failed to execute setState for key '${key}': ${error.message}`);
 			}

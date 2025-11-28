@@ -9,7 +9,7 @@ export const NodeSchema = z.object({
   setState: z.array(
     z.object({
       key: z.string(),
-      rule: z.array(z.any()),
+      template: z.any(),
     })
   ).optional(),
   streaming: z.object({
@@ -28,7 +28,10 @@ export const StaticEdgeSchema = z.object({
 export const DynamicEdgeSchema = z.object({
   id: z.string(),
   from: z.string(),
-  rule: z.array(z.any()),
+	conditions: z.array(z.object({
+		node: z.string(),
+		condition: z.string(),
+	}))
 });
 
 export const EdgeSchema = z.discriminatedUnion('type', [
